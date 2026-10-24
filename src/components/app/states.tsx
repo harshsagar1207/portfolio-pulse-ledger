@@ -126,7 +126,7 @@ export function Delta({ value, children }: { value: number | null; children: Rea
   );
 }
 
-export function StatCard({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: ReactNode; tone?: "gain" | "loss" }) {
+export function StatCard({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: ReactNode | undefined; tone?: "gain" | "loss" | undefined }) {
   return (
     <div className="rounded-lg border bg-card p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>

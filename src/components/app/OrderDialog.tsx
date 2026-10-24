@@ -14,7 +14,7 @@ import { usePortfolioIds } from "@/hooks/use-portfolio-data";
 import { StatusBadge } from "./states";
 import { cn } from "@/lib/utils";
 
-export interface SubmittedOrder { order_id: string; status: string; symbol: string; side: string; quantity: number; at: string; message?: string }
+export interface SubmittedOrder { order_id: string; status: string; symbol: string; side: string; quantity: number; at: string; message?: string | undefined }
 
 const SKEY = "spms.sessionOrders";
 export const loadSessionOrders = (): SubmittedOrder[] => {
@@ -136,7 +136,7 @@ export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", 
   );
 }
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+function Field({ label, error, children }: { label: string; error?: string | undefined; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
