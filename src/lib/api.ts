@@ -2,7 +2,7 @@
 // The browser never talks to PostgreSQL; every call goes through VITE_API_BASE_URL.
 
 export const API_BASE_URL: string | undefined =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || undefined;
+  (import.meta.env["VITE_API_BASE_URL"] as string | undefined)?.replace(/\/$/, "") || undefined;
 
 export const isApiConfigured = () => Boolean(API_BASE_URL);
 
@@ -47,7 +47,7 @@ function extractMessage(body: unknown, fallback: string): string {
   if (!body) return fallback;
   if (typeof body === "string") return body;
   const b = body as Record<string, unknown>;
-  const d = b.detail ?? b.message ?? b.error;
+  const d = b["detail"] ?? b["message"] ?? b["error"];
   if (typeof d === "string") return d;
   if (Array.isArray(d))
     return d.map((x) => (typeof x === "object" && x && "msg" in x ? String((x as { msg: unknown }).msg) : String(x))).join("; ");
@@ -67,7 +67,7 @@ export async function apiRequest<T = unknown>(path: string, opts: RequestOptions
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
   if (opts.idempotencyKey) headers["Idempotency-Key"] = opts.idempotencyKey;
   const session = getSession();
-  if (opts.auth !== false && session?.token) headers.Authorization = `Bearer ${session.token}`;
+  if (opts.auth !== false && session?.token) headers["Authorization"] = `Bearer ${session.token}`;
 
   let res: Response;
   try {
@@ -75,7 +75,7 @@ export async function apiRequest<T = unknown>(path: string, opts: RequestOptions
       method: opts.method ?? "GET",
       headers,
       credentials: "include",
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
     });
   } catch {
     throw new ApiError("network", "Could not reach the backend API. Check that it is running.");

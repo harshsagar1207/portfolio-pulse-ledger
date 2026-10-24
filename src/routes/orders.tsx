@@ -31,12 +31,12 @@ function Orders() {
           rows={rows as unknown as Record<string, unknown>[]}
           emptyTitle="No orders submitted in this session"
           columns={[
-            { key: "order_id", label: "Order ID", render: (r) => <span className="num">{String(r.order_id)}</span> },
-            { key: "at", label: "Created", render: (r) => fmtTime(r.at) },
+            { key: "order_id", label: "Order ID", render: (r) => <span className="num">{String(r["order_id"])}</span> },
+            { key: "at", label: "Created", render: (r) => fmtTime(r["at"]) },
             { key: "symbol", label: "Instrument" },
-            { key: "side", render: (r) => <span className={r.side === "BUY" ? "text-gain" : "text-loss"}>{String(r.side)}</span> },
-            { key: "quantity", label: "Qty", align: "right", render: (r) => fmtNum(r.quantity) },
-            { key: "status", render: (r) => <StatusBadge status={String(r.status)} /> },
+            { key: "side", render: (r) => <span className={r["side"] === "BUY" ? "text-gain" : "text-loss"}>{String(r["side"])}</span> },
+            { key: "quantity", label: "Qty", align: "right", render: (r) => fmtNum(r["quantity"]) },
+            { key: "status", render: (r) => <StatusBadge status={String(r["status"])} /> },
           ]}
         />
       </div>

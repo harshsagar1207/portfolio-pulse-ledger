@@ -13,8 +13,8 @@ interface AuthCtx {
 const Ctx = createContext<AuthCtx | null>(null);
 
 function rolesFrom(body: Record<string, unknown>): string[] {
-  const user = (body.user ?? {}) as Record<string, unknown>;
-  const raw = body.roles ?? user.roles ?? body.role ?? user.role;
+  const user = (body["user"] ?? {}) as Record<string, unknown>;
+  const raw = body["roles"] ?? user["roles"] ?? body["role"] ?? user["role"];
   if (Array.isArray(raw)) return raw.map((r) => String(typeof r === "object" && r ? (r as { name?: unknown }).name ?? "" : r).toLowerCase());
   if (typeof raw === "string") return [raw.toLowerCase()];
   return [];
@@ -39,8 +39,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     roles,
     hasRole: (...r) => r.some((x) => roles.includes(x)),
     signIn: (body) => {
-      const token = String(body.access_token ?? body.token ?? body.jwt ?? "");
-      setSession({ token, user: (body.user as Record<string, unknown>) ?? undefined, roles: rolesFrom(body) });
+      const token = String(body["access_token"] ?? body["token"] ?? body["jwt"] ?? "");
+      setSession({ token, user: (body["user"] as Record<string, unknown>) ?? undefined, roles: rolesFrom(body) });
     },
     signOut: () => setSession(null),
   };
