@@ -1,0 +1,147 @@
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRef, useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { api, ApiError } from "@/lib/api";
+import { fmtINR, pick } from "@/lib/format";
+import { orderSchema, type OrderInput } from "@/lib/order";
+import { usePortfolioIds } from "@/hooks/use-portfolio-data";
+import { StatusBadge } from "./states";
+import { cn } from "@/lib/utils";
+
+export interface SubmittedOrder { order_id: string; status: string; symbol: string; side: string; quantity: number; at: string; message?: string }
+
+const SKEY = "spms.sessionOrders";
+export const loadSessionOrders = (): SubmittedOrder[] => {
+  try { return JSON.parse(sessionStorage.getItem(SKEY) ?? "[]"); } catch { return []; }
+};
+const saveOrder = (o: SubmittedOrder) => sessionStorage.setItem(SKEY, JSON.stringify([o, ...loadSessionOrders()].slice(0, 50)));
+
+export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", trigger }: {
+  instrumentId: string; symbol: string; price: number | null; defaultSide?: "BUY" | "SELL"; trigger: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [confirm, setConfirm] = useState<OrderInput | null>(null);
+  const [result, setResult] = useState<SubmittedOrder | null>(null);
+  const idemKey = useRef<string>(crypto.randomUUID());
+  const { ids } = usePortfolioIds();
+  const qc = useQueryClient();
+
+  const form = useForm<OrderInput>({
+    resolver: zodResolver(orderSchema),
+    defaultValues: { portfolio_id: ids[0] ?? "", instrument_id: instrumentId, side: defaultSide, order_type: "MARKET", quantity: 1 },
+  });
+  const v = form.watch();
+  const unit = v.order_type === "LIMIT" ? Number(v.limit_price) : price;
+  const est = unit && Number(v.quantity) > 0 ? unit * Number(v.quantity) : null;
+
+  const m = useMutation({
+    mutationFn: (o: OrderInput) =>
+      api.placeOrder(
+        {
+          portfolio_id: isNaN(Number(o.portfolio_id)) ? o.portfolio_id : Number(o.portfolio_id),
+          instrument_id: isNaN(Number(o.instrument_id)) ? o.instrument_id : Number(o.instrument_id),
+          side: o.side, order_type: o.order_type, quantity: o.quantity,
+          ...(o.order_type === "LIMIT" ? { limit_price: o.limit_price } : {}),
+        },
+        idemKey.current,
+      ),
+    onSuccess: (res, o) => {
+      const rec: SubmittedOrder = {
+        order_id: String(pick(res, "order_id", "id") ?? "—"),
+        status: String(pick(res, "status", "state") ?? "NEW"),
+        symbol, side: o.side, quantity: o.quantity, at: new Date().toISOString(),
+        message: pick(res, "message", "reject_reason") as string | undefined,
+      };
+      saveOrder(rec);
+      setResult(rec);
+      setConfirm(null);
+      idemKey.current = crypto.randomUUID();
+      qc.invalidateQueries({ queryKey: ["portfolio"] });
+      toast.success(`Order ${rec.order_id} ${rec.status.toLowerCase()}`);
+    },
+    onError: (e) => {
+      setConfirm(null);
+      toast.error(e instanceof ApiError ? e.message : "Order could not be submitted");
+    },
+  });
+
+  const reset = (o: boolean) => {
+    setOpen(o);
+    if (!o) { setResult(null); setConfirm(null); }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={reset}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Order · {symbol}</DialogTitle>
+          <DialogDescription>Demo portfolio system — orders are not routed to NSE or BSE.</DialogDescription>
+        </DialogHeader>
+
+        {result ? (
+          <div className="space-y-3">
+            <div className="rounded-md border p-4 text-sm">
+              <p>Order ID <span className="num font-semibold">{result.order_id}</span></p>
+              <p className="mt-2 flex items-center gap-2">Status <StatusBadge status={result.status} /></p>
+              {result.message && <p className="mt-2 text-muted-foreground">{result.message}</p>}
+            </div>
+            <p className="text-xs text-muted-foreground">Accepted orders are filled separately by the matching engine. Check the portfolio for executed trades.</p>
+            <Button className="w-full" onClick={() => reset(false)}>Done</Button>
+          </div>
+        ) : confirm ? (
+          <div className="space-y-4 text-sm">
+            <p>Confirm <b>{confirm.side}</b> {confirm.quantity} × {symbol} ({confirm.order_type}{confirm.order_type === "LIMIT" ? ` @ ${fmtINR(confirm.limit_price)}` : ""}) in portfolio <span className="num">{confirm.portfolio_id}</span>?</p>
+            <p className="text-muted-foreground">Estimated value: <span className="num">{fmtINR(est)}</span> (excludes charges)</p>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setConfirm(null)}>Back</Button>
+              <Button className="flex-1" disabled={m.isPending} onClick={() => m.mutate(confirm)}>{m.isPending ? "Submitting…" : "Submit order"}</Button>
+            </div>
+          </div>
+        ) : (
+          <form className="space-y-4" onSubmit={form.handleSubmit((o) => setConfirm(o))}>
+            <div className="grid grid-cols-2 gap-2">
+              {(["BUY", "SELL"] as const).map((s) => (
+                <button type="button" key={s} onClick={() => form.setValue("side", s)}
+                  className={cn("rounded-md border py-2 text-sm font-medium", v.side === s && (s === "BUY" ? "border-gain bg-gain-soft text-gain" : "border-loss bg-loss-soft text-loss"))}>
+                  {s}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {(["MARKET", "LIMIT"] as const).map((t) => (
+                <button type="button" key={t} onClick={() => form.setValue("order_type", t)}
+                  className={cn("rounded-md border py-1.5 text-xs font-medium", v.order_type === t && "border-primary bg-accent")}>{t}</button>
+              ))}
+            </div>
+            <Field label="Portfolio ID" error={form.formState.errors.portfolio_id?.message}><Input {...form.register("portfolio_id")} /></Field>
+            <Field label="Quantity" error={form.formState.errors.quantity?.message}><Input type="number" step="any" {...form.register("quantity")} /></Field>
+            {v.order_type === "LIMIT" && (
+              <Field label="Limit price (₹)" error={form.formState.errors.limit_price?.message}><Input type="number" step="0.01" {...form.register("limit_price")} /></Field>
+            )}
+            <div className="flex justify-between rounded-md bg-muted px-3 py-2 text-sm">
+              <span className="text-muted-foreground">Estimated value</span><span className="num font-medium">{fmtINR(est)}</span>
+            </div>
+            <Button type="submit" className="w-full">Review order</Button>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      {children}
+      {error && <p className="text-xs text-loss">{error}</p>}
+    </div>
+  );
+}
