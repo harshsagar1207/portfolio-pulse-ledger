@@ -14,7 +14,7 @@ export function useInstruments() {
   return useQuery({ queryKey: ["instruments"], queryFn: api.instruments, enabled: enabled(), refetchInterval: POLL_MS });
 }
 export function usePortfolio(id: string | null) {
-  return useQuery({ queryKey: ["portfolio", id], queryFn: () => api.portfolio(id!), enabled: enabled() && !!id });
+  return useQuery({ queryKey: ["portfolio", id], queryFn: () => { if (!id) throw new Error("Portfolio ID is required"); return api.portfolio(id); }, enabled: enabled() && !!id });
 }
 export function useAudit() {
   return useQuery({ queryKey: ["audit"], queryFn: api.audit, enabled: enabled() });

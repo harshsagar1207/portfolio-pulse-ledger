@@ -4,6 +4,8 @@ import { NotConnected, PageHeader } from "@/components/app/states";
 export const Route = createFileRoute("/reports")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Reports · Stock Portfolio Management" },
       { name: "description", content: "Holdings, P&L, order and ledger reports." },
       { property: "og:title", content: "Reports · Stock Portfolio Management" },

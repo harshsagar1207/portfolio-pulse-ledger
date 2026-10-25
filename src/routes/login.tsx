@@ -10,6 +10,8 @@ import { useAuth } from "@/lib/auth";
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Sign in · Stock Portfolio Management" },
       { name: "description", content: "Sign in to your portfolio account." },
       { property: "og:title", content: "Sign in · Stock Portfolio Management" },
@@ -32,6 +34,7 @@ export function AuthLayout({ title, children }: { title: string; children: React
       </div>
       <div className="flex items-center justify-center p-6">
         <div className="w-full max-w-sm">
+          <Button asChild variant="link" className="mb-5 px-0"><Link to="/">← Portfolio</Link></Button>
           <h1 className="mb-6 text-2xl font-semibold">{title}</h1>
           {isApiConfigured() ? children : <ApiNotConfigured />}
         </div>
@@ -62,13 +65,13 @@ function Login() {
 
   return (
     <AuthLayout title="Sign in">
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={submit} className="space-y-4"><fieldset disabled={busy} className="space-y-4">
         <div className="space-y-1.5"><Label htmlFor="id">Username or email</Label><Input id="id" value={id} onChange={(e) => setId(e.target.value)} required autoComplete="username" /></div>
         <div className="space-y-1.5"><Label htmlFor="pw">Password</Label><Input id="pw" type="password" value={pw} onChange={(e) => setPw(e.target.value)} required autoComplete="current-password" /></div>
         {err && <p className="text-sm text-loss" role="alert">{err}</p>}
         <Button type="submit" className="w-full" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</Button>
         <p className="text-center text-sm text-muted-foreground">No account? <Link to="/register" className="text-foreground underline">Register</Link></p>
-      </form>
+      </fieldset></form>
     </AuthLayout>
   );
 }

@@ -9,9 +9,9 @@ import { cn } from "@/lib/utils";
 
 export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b pb-5">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-semibold">{title}</h1>
         {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
       </div>
       {actions && <div className="flex items-center gap-2">{actions}</div>}
@@ -23,7 +23,7 @@ function Panel({ icon, title, children, tone = "muted" }: { icon: ReactNode; tit
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center rounded-lg border border-dashed px-6 py-12 text-center",
+        "flex min-w-0 flex-col items-center justify-center border-y px-5 py-10 text-center",
         tone === "loss" && "border-loss/40 bg-loss-soft",
         tone === "pending" && "border-pending/50 bg-pending-soft",
         tone === "muted" && "bg-card",
@@ -31,7 +31,7 @@ function Panel({ icon, title, children, tone = "muted" }: { icon: ReactNode; tit
     >
       <div className="mb-3 text-muted-foreground">{icon}</div>
       <p className="font-medium">{title}</p>
-      {children && <div className="mt-2 max-w-md text-sm text-muted-foreground">{children}</div>}
+      {children && <div className="mt-2 max-w-md break-words text-sm text-muted-foreground">{children}</div>}
     </div>
   );
 }
@@ -75,8 +75,8 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
 export function ApiNotConfigured() {
   return (
     <Panel icon={<PlugZap className="h-6 w-6" />} title="Backend API not connected" tone="pending">
-      Set the <code className="num rounded bg-muted px-1">VITE_API_BASE_URL</code> environment variable to your Portfolio API
-      to load live account data. No sample figures are shown in its place.
+      <p>Your Portfolio API is not connected. Account balances, prices and holdings are unavailable.</p>
+      <Button asChild variant="outline" size="sm" className="mt-4"><Link to="/settings">Connection settings</Link></Button>
     </Panel>
   );
 }
@@ -130,8 +130,8 @@ export function StatCard({ label, value, hint, tone }: { label: string; value: R
   return (
     <div className="rounded-lg border bg-card p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className={cn("num mt-2 text-xl font-semibold", tone === "gain" && "text-gain", tone === "loss" && "text-loss")}>{value}</p>
-      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+      <div className={cn("num mt-2 break-words text-xl font-semibold", tone === "gain" && "text-gain", tone === "loss" && "text-loss")}>{value}</div>
+      {hint && <div className="mt-1 text-xs text-muted-foreground">{hint}</div>}
     </div>
   );
 }

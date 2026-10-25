@@ -8,6 +8,8 @@ import { humanize } from "@/lib/format";
 export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Administration · Stock Portfolio Management" },
       { name: "description", content: "System reconciliation results." },
       { property: "og:title", content: "Administration · Stock Portfolio Management" },
@@ -28,9 +30,9 @@ function Admin() {
         {q.isLoading ? <TableSkeleton /> : q.error ? <ErrorState error={q.error} onRetry={() => q.refetch()} /> : obj ? (
           <dl className="rounded-lg border bg-card">
             {Object.entries(obj).map(([k, v]) => (
-              <div key={k} className="flex justify-between border-b px-4 py-2 text-sm last:border-0">
+              <div key={k} className="flex flex-wrap justify-between gap-3 border-b px-4 py-2 text-sm last:border-0">
                 <dt className="text-muted-foreground">{humanize(k)}</dt>
-                <dd className="num">{typeof v === "object" ? JSON.stringify(v) : String(v)}</dd>
+                <dd className="num min-w-0 max-w-full break-words">{typeof v === "object" ? <pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(v, null, 2)}</pre> : String(v)}</dd>
               </div>
             ))}
           </dl>

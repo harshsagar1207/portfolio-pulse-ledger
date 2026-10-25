@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowDownUp, Download } from "lucide-react";
+import { ArrowDownUp, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { humanize } from "@/lib/format";
@@ -42,7 +42,8 @@ export function DataTable<T extends Row>({
   const getVal = (c: Column<T>, r: T) => (c.value ? c.value(r) : r[c.key]);
   const sorted = useMemo(() => {
     if (!sort) return rows;
-    const col = columns.find((c) => c.key === sort.key)!;
+    const col = columns.find((c) => c.key === sort.key);
+    if (!col) return rows;
     return [...rows].sort((a, b) => {
       const x = getVal(col, a), y = getVal(col, b);
       const nx = Number(x), ny = Number(y);
@@ -61,9 +62,11 @@ export function DataTable<T extends Row>({
     const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const csv = [columns.map((c) => esc(c.label ?? humanize(c.key))).join(","), ...sorted.map((r) => columns.map((c) => esc(getVal(c, r))).join(","))].join("\n");
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    a.href = url;
     a.download = `${csvName}.csv`;
     a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -73,20 +76,20 @@ export function DataTable<T extends Row>({
           <TableHeader>
             <TableRow>
               {columns.map((c) => (
-                <TableHead key={c.key} className={c.align === "right" ? "text-right" : ""}>
-                  <button
-                    className="inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide hover:text-foreground"
-                    onClick={() => setSort((s) => ({ key: c.key, dir: s?.key === c.key && s.dir === 1 ? -1 : 1 }))}
+                <TableHead key={c.key} aria-sort={sort?.key === c.key ? sort.dir === 1 ? "ascending" : "descending" : "none"} className={c.align === "right" ? "text-right" : ""}>
+                  <Button variant="ghost" size="sm"
+                    className="h-auto px-0 text-xs font-medium uppercase tracking-wide hover:bg-transparent hover:text-foreground"
+                    onClick={() => { setPage(0); setSort((s) => ({ key: c.key, dir: s?.key === c.key && s.dir === 1 ? -1 : 1 })); }}
                   >
                     {c.label ?? humanize(c.key)} <ArrowDownUp className="h-3 w-3 opacity-50" />
-                  </button>
+                  </Button>
                 </TableHead>
               ))}
             </TableRow>
           </TableHeader>
           <TableBody>
             {view.map((r, i) => (
-              <TableRow key={i} className={onRowClick ? "cursor-pointer" : ""} onClick={() => onRowClick?.(r)}>
+              <TableRow key={i} tabIndex={onRowClick ? 0 : undefined} className={onRowClick ? "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" : ""} onClick={() => onRowClick?.(r)} onKeyDown={(e) => { if (onRowClick && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onRowClick(r); } }}>
                 {columns.map((c) => (
                   <TableCell key={c.key} className={c.align === "right" ? "num text-right" : ""}>
                     {c.render ? c.render(r) : String(getVal(c, r) ?? "—")}
@@ -97,15 +100,15 @@ export function DataTable<T extends Row>({
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-between gap-2 border-t px-4 py-2 text-xs text-muted-foreground">
-        <span>{sorted.length} rows</span>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2 text-xs text-muted-foreground">
+        <span>{p * pageSize + 1}–{Math.min((p + 1) * pageSize, sorted.length)} of {sorted.length}</span>
         <div className="flex items-center gap-2">
           {csvName && (
             <Button variant="ghost" size="sm" onClick={exportCsv}><Download className="mr-1 h-3.5 w-3.5" />CSV</Button>
           )}
-          <Button variant="outline" size="sm" disabled={p === 0} onClick={() => setPage(p - 1)}>Prev</Button>
-          <span>{p + 1} / {pages}</span>
-          <Button variant="outline" size="sm" disabled={p >= pages - 1} onClick={() => setPage(p + 1)}>Next</Button>
+          <Button variant="outline" size="icon" aria-label="Previous page" title="Previous page" disabled={p === 0} onClick={() => setPage(p - 1)}><ChevronLeft /></Button>
+          <span aria-live="polite">{p + 1} / {pages}</span>
+          <Button variant="outline" size="icon" aria-label="Next page" title="Next page" disabled={p >= pages - 1} onClick={() => setPage(p + 1)}><ChevronRight /></Button>
         </div>
       </div>
     </div>

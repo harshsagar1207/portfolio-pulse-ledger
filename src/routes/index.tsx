@@ -5,10 +5,14 @@ import { DataTable } from "@/components/app/DataTable";
 import { EmptyState, ErrorState, NotConnected, PageHeader, RequireApi, StatCard, TableSkeleton, Delta } from "@/components/app/states";
 import { cashOf, inst, matchesClass, positionsOf, useInstruments, usePortfolio, usePortfolioIds, type Row } from "@/hooks/use-portfolio-data";
 import { fmtINR, fmtNum, fmtPct, fmtTime, pick, toNum } from "@/lib/format";
+import { isApiConfigured } from "@/lib/api";
+import { ArrowUpRight, Briefcase, LineChart, ListOrdered } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Dashboard · Stock Portfolio Management" },
       { name: "description", content: "Portfolio value, cash, holdings and Indian market indices at a glance." },
       { property: "og:title", content: "Dashboard · Stock Portfolio Management" },
@@ -52,10 +56,24 @@ function Dashboard() {
 
   return (
     <>
-      <PageHeader title="Dashboard" description={pid ? `Portfolio ${pid}` : "Add a portfolio to see account figures"} />
+      <PageHeader title="Dashboard" description={pid ? `Portfolio ${pid}` : "Your Indian-market portfolio overview"} actions={<Button asChild variant="outline" size="sm"><Link to="/portfolios"><Briefcase />My Portfolios</Link></Button>} />
+      {!isApiConfigured() && <>
+        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {["Market value", "Invested value", "Available cash", "Unrealized P&L"].map((label) => <StatCard key={label} label={label} value="—" hint="Awaiting account data" />)}
+        </div>
+        <div className="mb-8"><RequireApi><span /></RequireApi></div>
+        <section className="mb-8">
+          <h2 className="mb-3 text-base font-semibold">Workspace</h2>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[{ title: "My Portfolios", to: "/portfolios", icon: Briefcase, label: "Holdings & cash" }, { title: "Markets", to: "/markets", icon: LineChart, label: "Instruments & prices" }, { title: "Orders", to: "/orders", icon: ListOrdered, label: "Session submissions" }].map((item) => <Link key={item.to} to={item.to} className="group flex items-center gap-3 rounded-lg border bg-card p-4 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><item.icon className="h-5 w-5 text-muted-foreground" /><div><p className="text-sm font-semibold">{item.title}</p><p className="mt-1 text-xs text-muted-foreground">{item.label}</p></div><ArrowUpRight className="ml-auto h-4 w-4 text-muted-foreground" /></Link>)}
+          </div>
+        </section>
+        <section><h2 className="mb-3 text-base font-semibold">Current holdings</h2><EmptyState title="Holdings unavailable">Your holdings will appear after the Portfolio API is connected.</EmptyState></section>
+      </>}
+      {isApiConfigured() &&
       <RequireApi>
         <section className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-          {ins.isLoading ? <TableSkeleton rows={2} /> : indices.length ? indices.map((r) => {
+          {ins.isLoading ? <TableSkeleton rows={2} /> : ins.error ? <div className="col-span-full"><ErrorState error={ins.error} onRetry={() => ins.refetch()} /></div> : indices.length ? indices.map((r) => {
             const pr = inst.price(r), prev = inst.prev(r);
             const ch = pr !== null && prev ? ((pr - prev) / prev) * 100 : null;
             return <StatCard key={inst.id(r)} label={inst.name(r)} value={fmtNum(pr)} hint={<Delta value={ch}>{ch === null ? "change n/a" : fmtPct(ch)}</Delta>} />;
@@ -98,10 +116,10 @@ function Dashboard() {
             </section>
             <h2 className="mb-3 text-sm font-semibold">Current holdings</h2>
             <DataTable rows={positions} columns={holdingCols()} emptyTitle="No holdings in this portfolio" pageSize={8} />
-            <p className="mt-2 text-xs text-muted-foreground">Prices last refreshed {fmtTime(new Date(ins.dataUpdatedAt || Date.now()).toISOString())} · simulated feed</p>
+            <p className="mt-2 text-xs text-muted-foreground">Prices last refreshed {ins.dataUpdatedAt ? fmtTime(new Date(ins.dataUpdatedAt).toISOString()) : "—"} · simulated feed</p>
           </>
         )}
-      </RequireApi>
+      </RequireApi>}
     </>
   );
 }
