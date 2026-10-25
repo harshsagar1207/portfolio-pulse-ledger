@@ -10,6 +10,8 @@ import { AuthLayout } from "./login";
 export const Route = createFileRoute("/register")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Register · Stock Portfolio Management" },
       { name: "description", content: "Create a portfolio account." },
       { property: "og:title", content: "Register · Stock Portfolio Management" },

@@ -13,6 +13,8 @@ import { isApiConfigured } from "@/lib/api";
 export const Route = createFileRoute("/markets")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Markets · Stock Portfolio Management" },
       { name: "description", content: "Search Indian equities, indices, funds, bonds and IPOs." },
       { property: "og:title", content: "Markets · Stock Portfolio Management" },

@@ -6,6 +6,8 @@ import { useAudit } from "@/hooks/use-portfolio-data";
 export const Route = createFileRoute("/audit")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Audit Logs · Stock Portfolio Management" },
       { name: "description", content: "Audit events for authorized users." },
       { property: "og:title", content: "Audit Logs · Stock Portfolio Management" },

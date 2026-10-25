@@ -10,6 +10,8 @@ import { api } from "@/lib/api";
 export const Route = createFileRoute("/portfolios")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "My Portfolios · Stock Portfolio Management" },
       { name: "description", content: "Open and inspect your portfolios." },
       { property: "og:title", content: "My Portfolios · Stock Portfolio Management" },

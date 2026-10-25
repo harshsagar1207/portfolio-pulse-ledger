@@ -11,6 +11,8 @@ import { ArrowUpRight, Briefcase, LineChart, ListOrdered } from "lucide-react";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Dashboard · Stock Portfolio Management" },
       { name: "description", content: "Portfolio value, cash, holdings and Indian market indices at a glance." },
       { property: "og:title", content: "Dashboard · Stock Portfolio Management" },

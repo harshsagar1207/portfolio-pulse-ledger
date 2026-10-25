@@ -8,6 +8,8 @@ import { humanize } from "@/lib/format";
 export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Administration · Stock Portfolio Management" },
       { name: "description", content: "System reconciliation results." },
       { property: "og:title", content: "Administration · Stock Portfolio Management" },

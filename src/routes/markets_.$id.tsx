@@ -7,11 +7,13 @@ import { inst, useInstruments } from "@/hooks/use-portfolio-data";
 import { fmtINR, fmtTime, humanize } from "@/lib/format";
 
 export const Route = createFileRoute("/markets_/$id")({
-  head: () => ({
+  head: ({ params }) => ({
     meta: [
-      { title: "Instrument · Stock Portfolio Management" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { title: `Instrument ${params.id} · Stock Portfolio Management` },
       { name: "description", content: "Latest price and details for an instrument." },
-      { property: "og:title", content: "Instrument details" },
+      { property: "og:title", content: `Instrument ${params.id} · Stock Portfolio Management` },
       { property: "og:description", content: "Latest price and details for an instrument." },
     ],
   }),

@@ -4,6 +4,8 @@ import { AssetClassPage } from "@/components/app/AssetClassPage";
 export const Route = createFileRoute("/bonds")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Bonds · Stock Portfolio Management" },
       { name: "description", content: "Coupon, maturity and terms for listed bonds." },
       { property: "og:title", content: "Bonds · Stock Portfolio Management" },

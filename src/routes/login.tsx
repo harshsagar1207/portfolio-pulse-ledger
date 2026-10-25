@@ -10,6 +10,8 @@ import { useAuth } from "@/lib/auth";
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Sign in · Stock Portfolio Management" },
       { name: "description", content: "Sign in to your portfolio account." },
       { property: "og:title", content: "Sign in · Stock Portfolio Management" },

@@ -9,6 +9,8 @@ import { pick } from "@/lib/format";
 export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Settings · Stock Portfolio Management" },
       { name: "description", content: "Account, session and API connection status." },
       { property: "og:title", content: "Settings · Stock Portfolio Management" },

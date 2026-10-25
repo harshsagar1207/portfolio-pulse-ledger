@@ -10,9 +10,11 @@ import { holdingCols } from "./index";
 export const Route = createFileRoute("/portfolios_/$id")({
   head: ({ params }) => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: `Portfolio ${params.id} · Stock Portfolio Management` },
       { name: "description", content: "Holdings, cash and allocation for this portfolio." },
-      { property: "og:title", content: `Portfolio ${params.id}` },
+      { property: "og:title", content: `Portfolio ${params.id} · Stock Portfolio Management` },
       { property: "og:description", content: "Holdings, cash and allocation for this portfolio." },
     ],
   }),
