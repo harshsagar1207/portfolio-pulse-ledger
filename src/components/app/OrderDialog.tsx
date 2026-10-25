@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ const SKEY = "spms.sessionOrders";
 export const loadSessionOrders = (): SubmittedOrder[] => {
   try { return JSON.parse(sessionStorage.getItem(SKEY) ?? "[]"); } catch { return []; }
 };
-const saveOrder = (o: SubmittedOrder) => sessionStorage.setItem(SKEY, JSON.stringify([o, ...loadSessionOrders()].slice(0, 50)));
+const saveOrder = (o: SubmittedOrder) => { try { sessionStorage.setItem(SKEY, JSON.stringify([o, ...loadSessionOrders()].slice(0, 50))); } catch { /* Receipt remains visible even if browser storage is unavailable. */ } };
 
 export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", trigger }: {
   instrumentId: string; symbol: string; price: number | null; defaultSide?: "BUY" | "SELL"; trigger: React.ReactNode;
@@ -37,6 +37,9 @@ export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", 
     defaultValues: { portfolio_id: ids[0] ?? "", instrument_id: instrumentId, side: defaultSide, order_type: "MARKET", quantity: 1 },
   });
   const v = form.watch();
+  useEffect(() => {
+    if (open && !form.getValues("portfolio_id") && ids[0]) form.setValue("portfolio_id", ids[0]);
+  }, [open, ids, form]);
   const unit = v.order_type === "LIMIT" ? Number(v.limit_price) : price;
   const est = unit && Number(v.quantity) > 0 ? unit * Number(v.quantity) : null;
 
@@ -79,7 +82,7 @@ export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", 
   return (
     <Dialog open={open} onOpenChange={reset}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent>
+        <DialogContent onInteractOutside={(e) => { if (m.isPending) e.preventDefault(); }} onEscapeKeyDown={(e) => { if (m.isPending) e.preventDefault(); }}>
         <DialogHeader>
           <DialogTitle>Order · {symbol}</DialogTitle>
           <DialogDescription>Demo portfolio system — orders are not routed to NSE or BSE.</DialogDescription>
@@ -100,7 +103,7 @@ export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", 
             <p>Confirm <b>{confirm.side}</b> {confirm.quantity} × {symbol} ({confirm.order_type}{confirm.order_type === "LIMIT" ? ` @ ${fmtINR(confirm.limit_price)}` : ""}) in portfolio <span className="num">{confirm.portfolio_id}</span>?</p>
             <p className="text-muted-foreground">Estimated value: <span className="num">{fmtINR(est)}</span> (excludes charges)</p>
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => setConfirm(null)}>Back</Button>
+              <Button variant="outline" className="flex-1" disabled={m.isPending} onClick={() => setConfirm(null)}>Back</Button>
               <Button className="flex-1" disabled={m.isPending} onClick={() => m.mutate(confirm)}>{m.isPending ? "Submitting…" : "Submit order"}</Button>
             </div>
           </div>
@@ -108,16 +111,16 @@ export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", 
           <form className="space-y-4" onSubmit={form.handleSubmit((o) => setConfirm(o))}>
             <div className="grid grid-cols-2 gap-2">
               {(["BUY", "SELL"] as const).map((s) => (
-                <button type="button" key={s} onClick={() => form.setValue("side", s)}
+                <Button variant="outline" type="button" key={s} aria-pressed={v.side === s} onClick={() => form.setValue("side", s)}
                   className={cn("rounded-md border py-2 text-sm font-medium", v.side === s && (s === "BUY" ? "border-gain bg-gain-soft text-gain" : "border-loss bg-loss-soft text-loss"))}>
                   {s}
-                </button>
+                </Button>
               ))}
             </div>
             <div className="grid grid-cols-2 gap-2">
               {(["MARKET", "LIMIT"] as const).map((t) => (
-                <button type="button" key={t} onClick={() => form.setValue("order_type", t)}
-                  className={cn("rounded-md border py-1.5 text-xs font-medium", v.order_type === t && "border-primary bg-accent")}>{t}</button>
+                <Button variant="outline" type="button" key={t} aria-pressed={v.order_type === t} onClick={() => form.setValue("order_type", t)}
+                  className={cn("rounded-md border py-1.5 text-xs font-medium", v.order_type === t && "border-primary bg-accent")}>{t}</Button>
               ))}
             </div>
             <Field label="Portfolio ID" error={form.formState.errors.portfolio_id?.message}><Input {...form.register("portfolio_id")} /></Field>
@@ -139,8 +142,7 @@ export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", 
 function Field({ label, error, children }: { label: string; error?: string | undefined; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
-      {children}
+      <Label className="block space-y-1.5"><span>{label}</span>{children}</Label>
       {error && <p className="text-xs text-loss">{error}</p>}
     </div>
   );

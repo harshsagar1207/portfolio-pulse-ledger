@@ -39,14 +39,14 @@ function Register() {
 
   return (
     <AuthLayout title="Create account">
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={submit} className="space-y-4"><fieldset disabled={busy} className="space-y-4">
         <div className="space-y-1.5"><Label htmlFor="u">Username</Label><Input id="u" value={f.username} onChange={set("username")} required /></div>
         <div className="space-y-1.5"><Label htmlFor="e">Email</Label><Input id="e" type="email" value={f.email} onChange={set("email")} required /></div>
         <div className="space-y-1.5"><Label htmlFor="p">Password</Label><Input id="p" type="password" value={f.password} onChange={set("password")} required autoComplete="new-password" /></div>
         {err && <p className="text-sm text-loss" role="alert">{err}</p>}
         <Button type="submit" className="w-full" disabled={busy}>{busy ? "Creating…" : "Register"}</Button>
         <p className="text-center text-sm text-muted-foreground">Have an account? <Link to="/login" className="text-foreground underline">Sign in</Link></p>
-      </form>
+      </fieldset></form>
     </AuthLayout>
   );
 }
