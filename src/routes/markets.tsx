@@ -8,6 +8,7 @@ import { DataTable } from "@/components/app/DataTable";
 import { DemoBadge, ErrorState, PageHeader, RequireApi, TableSkeleton, Delta } from "@/components/app/states";
 import { inst, useInstruments, type Row } from "@/hooks/use-portfolio-data";
 import { fmtINR, fmtPct, fmtTime } from "@/lib/format";
+import { isApiConfigured } from "@/lib/api";
 
 export const Route = createFileRoute("/markets")({
   head: () => ({
@@ -40,7 +41,7 @@ function Markets() {
 
   return (
     <>
-      <PageHeader title="Markets" description="Instruments and latest prices from the backend." actions={<><DemoBadge /><Button variant="outline" size="sm" onClick={() => q.refetch()}><RefreshCw className="mr-1 h-3.5 w-3.5" />Refresh</Button></>} />
+      <PageHeader title="Markets" description="Instruments and latest prices." actions={<Button variant="outline" size="sm" disabled={!isApiConfigured() || q.isFetching} onClick={() => q.refetch()}><RefreshCw className={q.isFetching ? "animate-spin" : ""} />{q.isFetching ? "Refreshing…" : "Refresh"}</Button>} />
       <RequireApi>
         <div className="mb-4 flex flex-wrap gap-2">
           <Input className="max-w-xs" placeholder="Search symbol or name" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search" />

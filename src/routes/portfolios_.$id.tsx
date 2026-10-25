@@ -1,4 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, LineChart } from "lucide-react";
 import { DataTable } from "@/components/app/DataTable";
 import { ErrorState, PageHeader, RequireApi, StatCard, TableSkeleton } from "@/components/app/states";
 import { cashOf, positionsOf, usePortfolio } from "@/hooks/use-portfolio-data";
@@ -23,7 +25,8 @@ function PortfolioDetail() {
   const cash = cashOf(p.data);
   return (
     <>
-      <PageHeader title={String(pick(p.data, "name", "portfolio_name") ?? `Portfolio ${id}`)} description={`ID ${id}`} />
+      <Button asChild variant="link" size="sm" className="mb-3 px-0"><Link to="/portfolios"><ArrowLeft />My Portfolios</Link></Button>
+      <PageHeader title={String(pick(p.data, "name", "portfolio_name") ?? `Portfolio ${id}`)} description={`ID ${id}`} actions={<Button asChild variant="outline" size="sm"><Link to="/markets"><LineChart />Markets</Link></Button>} />
       <RequireApi>
         {p.isLoading ? <TableSkeleton /> : p.error ? <ErrorState error={p.error} onRetry={() => p.refetch()} /> : (
           <>

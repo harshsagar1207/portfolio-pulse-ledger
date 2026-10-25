@@ -3,14 +3,15 @@ import {
   BarChart3, Briefcase, Building2, FileText, Gauge, Landmark, LineChart, ListOrdered, LogIn, LogOut,
   Receipt, Rocket, Settings, ShieldCheck, Star, ScrollText,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader,
-  SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger,
+  SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/lib/auth";
 import { isApiConfigured } from "@/lib/api";
 import { DemoBadge } from "@/components/app/states";
+import { Button } from "@/components/ui/button";
 
 const main = [
   { title: "Dashboard", url: "/", icon: Gauge },
@@ -48,15 +49,23 @@ function NavGroup({ label, items }: { label: string; items: ReadonlyArray<{ titl
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  return <SidebarProvider><ShellContent>{children}</ShellContent></SidebarProvider>;
+}
+
+function ShellContent({ children }: { children: ReactNode }) {
   const { session, hasRole, signOut } = useAuth();
   const navigate = useNavigate();
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  const { setOpenMobile } = useSidebar();
+  useEffect(() => { setOpenMobile(false); }, [path, setOpenMobile]);
+  const pageName = [...main, ...assets, { title: "Settings", url: "/settings" }].find((item) => item.url === "/" ? path === "/" : path.startsWith(item.url))?.title ?? "Portfolio";
   const restricted = [
     ...(hasRole("auditor", "admin", "administrator") ? [{ title: "Audit Logs", url: "/audit", icon: ScrollText }] : []),
     ...(hasRole("admin", "administrator") ? [{ title: "Administration", url: "/admin", icon: ShieldCheck }] : []),
   ];
   return (
-    <SidebarProvider>
       <div className="flex min-h-screen w-full">
+        <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-background focus:p-3">Skip to content</a>
         <Sidebar collapsible="icon">
           <SidebarHeader>
             <div className="flex items-center gap-2 px-2 py-2">
@@ -92,16 +101,18 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur">
             <SidebarTrigger />
+            <span className="hidden text-sm font-medium sm:block">{pageName}</span>
             <div className="ml-auto flex items-center gap-3">
               <DemoBadge />
-              <span className={`text-xs ${isApiConfigured() ? "text-gain" : "text-muted-foreground"}`}>
+              <span className={`hidden text-xs md:block ${isApiConfigured() ? "text-gain" : "text-muted-foreground"}`}>
                 {isApiConfigured() ? "● API configured" : "○ API not connected"}
               </span>
+              {!session && <Button asChild variant="outline" size="sm"><Link to="/login">Sign in</Link></Button>}
             </div>
           </header>
-          <main className="mx-auto w-full max-w-7xl flex-1 p-4 md:p-8">{children}</main>
+          <main id="main-content" className="mx-auto w-full max-w-7xl flex-1 p-4 md:p-8">{children}</main>
+          <footer className="flex flex-wrap justify-between gap-2 border-t px-4 py-3 text-xs text-muted-foreground md:px-8"><span>Portfolio · Indian markets</span><span>Demo environment · No exchange execution</span></footer>
         </div>
       </div>
-    </SidebarProvider>
   );
 }

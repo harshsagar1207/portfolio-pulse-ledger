@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OrderDialog } from "@/components/app/OrderDialog";
 import { DemoBadge, EmptyState, ErrorState, NotConnected, PageHeader, RequireApi, StatCard, TableSkeleton } from "@/components/app/states";
@@ -23,7 +24,7 @@ function InstrumentDetail() {
   const r = (q.data ?? []).find((x) => inst.id(x) === id);
   const tradable = r ? inst.tradable(r) !== false && !inst.cls(r).includes("INDEX") : false;
   return (
-    <RequireApi>
+    <><Button asChild variant="link" size="sm" className="mb-3 px-0"><Link to="/markets"><ArrowLeft />Markets</Link></Button><RequireApi>
       {q.isLoading ? <TableSkeleton /> : q.error ? <ErrorState error={q.error} onRetry={() => q.refetch()} /> : !r ? <EmptyState title="Instrument not found" /> : (
         <>
           <PageHeader title={inst.symbol(r)} description={`${inst.name(r)} · ${inst.cls(r) || "—"} · ${inst.exchange(r)}`}
@@ -39,8 +40,8 @@ function InstrumentDetail() {
           <div className="mb-6 rounded-lg border bg-card">
             <dl className="grid divide-y sm:grid-cols-2 sm:divide-y-0">
               {Object.entries(r).filter(([, v]) => v !== null && typeof v !== "object").map(([k, v]) => (
-                <div key={k} className="flex justify-between gap-4 border-b px-4 py-2 text-sm">
-                  <dt className="text-muted-foreground">{humanize(k)}</dt><dd className="num text-right">{String(v)}</dd>
+                <div key={k} className="flex min-w-0 justify-between gap-4 border-b px-4 py-2 text-sm">
+                  <dt className="text-muted-foreground">{humanize(k)}</dt><dd className="num min-w-0 break-words text-right">{String(v)}</dd>
                 </div>
               ))}
             </dl>
@@ -48,6 +49,6 @@ function InstrumentDetail() {
           <NotConnected feature="Historical price chart" detail="No verified historical-prices endpoint. The chart will appear once one is exposed." />
         </>
       )}
-    </RequireApi>
+    </RequireApi></>
   );
 }
