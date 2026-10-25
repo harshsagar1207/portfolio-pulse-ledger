@@ -7,6 +7,7 @@ validate shape, translate errors, and set the per-request identity.
 import csv
 import io
 import json
+import logging
 import os
 import re
 import time
@@ -14,10 +15,10 @@ import uuid
 from collections import defaultdict, deque
 from decimal import Decimal, InvalidOperation
 
-from dotenv import load_dotenv
-load_dotenv()
 from starlette.applications import Starlette
 from starlette.exceptions import HTTPException
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
@@ -25,10 +26,14 @@ from starlette.routing import Route
 import pg
 import security as sec
 
-HOST, PORT, DB = (os.environ.get("PGHOST", "/tmp"), os.environ.get("PGPORT", "5433"),
-                  os.environ.get("PFDB", "portfolio"))
-APP = pg.Pool(f"host={HOST} port={PORT} dbname={DB} user=app_role", 8)
-ADMIN = pg.Pool(f"host={HOST} port={PORT} dbname={DB} user=admin_role", 2)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("pf")
+
+# Set PF_DEBUG=1 while developing to get the underlying error text in 500 responses.
+DEBUG = os.environ.get("PF_DEBUG") == "1"
+
+APP = pg.Pool(pg.dsn("app_role"), 8)
+ADMIN = pg.Pool(pg.dsn("admin_role"), 2)
 
 # SQLSTATE -> (HTTP status, public message). Anything else becomes a generic 500.
 ERRORS = {"PF001": 409, "PF002": 409, "PF003": 409, "PF004": 404, "PF005": 422, "PF006": 403,
@@ -42,6 +47,18 @@ class Json(JSONResponse):
 
 def err(status, msg, **extra):
     return Json({"error": msg, **extra}, status_code=status)
+
+
+def internal_error(request: Request, exc: Exception):
+    """Log the real traceback and return a JSON 500.
+
+    Returned from inside the handler (not raised) so it passes back through CORSMiddleware and
+    carries Access-Control-Allow-Origin. An exception that escapes to Starlette's outermost
+    handler gets a 500 WITHOUT CORS headers, which the browser reports as a network failure.
+    """
+    log.exception("unhandled error in %s %s", request.method, request.url.path)
+    extra = {"detail": f"{type(exc).__name__}: {exc}"} if DEBUG else {}
+    return err(500, "internal error", **extra)
 
 
 def money(v, field, places=4, positive=True):
@@ -275,9 +292,22 @@ def list_orders(request, c):
 
 # ---------------------------------------------------------------- market data
 def instruments(request):
+    """Public instrument list. Optional filters: asset_class, sector, exchange, q (symbol/name)."""
+    qp = request.query_params
+    asset_class = (qp.get("asset_class") or "").strip().upper() or None
+    sector = (qp.get("sector") or "").strip() or None
+    exchange = (qp.get("exchange") or "").strip().upper() or None
+    q = (qp.get("q") or "").strip()[:64] or None
     return Json(run(APP, None, lambda cn: cn.execute(
-        "SELECT i.instrument_id, i.symbol, i.exchange, i.currency, lp.price AS last_price "
-        "FROM instrument i LEFT JOIN latest_price lp USING (instrument_id) ORDER BY symbol")))
+        "SELECT i.instrument_id, i.symbol, i.name, i.exchange, i.currency, i.asset_class, i.sector, "
+        "       i.tradable, i.underlying_id, lp.price AS last_price "
+        "FROM instrument i LEFT JOIN latest_price lp USING (instrument_id) "
+        "WHERE ($1::text IS NULL OR i.asset_class = $1::text) "
+        "  AND ($2::text IS NULL OR i.sector = $2::text) "
+        "  AND ($3::text IS NULL OR i.exchange = $3::text) "
+        "  AND ($4::text IS NULL OR i.symbol ILIKE '%' || $4::text || '%' "
+        "       OR i.name ILIKE '%' || $4::text || '%') "
+        "ORDER BY i.symbol", (asset_class, sector, exchange, q))))
 
 
 # ---------------------------------------------------------------- admin
@@ -314,6 +344,8 @@ async def admin_prices_h(request: Request):
         return await anyio.to_thread.run_sync(lambda: load_prices(c, raw))
     except HTTPException as e:
         return err(e.status_code, e.detail)
+    except Exception as e:
+        return internal_error(request, e)
 
 
 def reconcile_view(c):
@@ -344,6 +376,8 @@ async def _wrapped(fn, request, need=None, with_body=False, public=False):
         return await _call(fn, request, c, b, **request.path_params)
     except HTTPException as e:
         return err(e.status_code, e.detail)
+    except Exception as e:
+        return internal_error(request, e)
 
 
 def route(path, fn, methods, **kw):
@@ -387,5 +421,16 @@ app = Starlette(routes=[
     route("/admin/reconcile", reconcile_view, ["GET"], need="ADMIN"),
     route("/admin/corporate-actions/{ca_id:int}/apply", apply_ca, ["POST"], need="ADMIN"),
     Route("/admin/prices", admin_prices_h, methods=["POST"]),
-], middleware=[__import__("starlette.middleware", fromlist=["Middleware"]).Middleware(
-    BaseHTTPMiddleware, dispatch=security_headers)])
+], middleware=[
+    # CORS first = outermost, so preflight (OPTIONS) is answered before anything else runs.
+    # Origins: comma-separated PF_CORS_ORIGINS, default is the local front end.
+    Middleware(
+        CORSMiddleware,
+        allow_origins=[o.strip() for o in os.environ.get(
+            "PF_CORS_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080").split(",") if o.strip()],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    ),
+    Middleware(BaseHTTPMiddleware, dispatch=security_headers),
+])
