@@ -15,3 +15,6 @@
 - Data reads use client-side TanStack Query (session token is in sessionStorage, unavailable during SSR).
 - The app shell closes mobile navigation on route changes so destination pages are immediately visible.
 - Disconnected dashboard values remain unavailable placeholders; workspace links are usable without inventing financial data.
+- Share the price query across instrument tables and detail views, and poll portfolio snapshots separately so valuation stays backend-owned.
+- Reuse portfolio selection and authenticated history views for trades, ledger, and realized P&L to keep session-aware fetching consistent.
+- Validate instrument increments in the order schema and serialize the backend order contract in one payload function to prevent form/API field drift.

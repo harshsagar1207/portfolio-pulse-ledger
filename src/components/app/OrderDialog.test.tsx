@@ -18,7 +18,7 @@ describe("order review", () => {
     await screen.findByRole("button", { name: "Submit order" });
     expect(place).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Submit order" }));
-    await waitFor(() => expect(place).toHaveBeenCalledWith({ portfolio_id: 17, instrument_id: 5, side: "BUY", order_type: "MARKET", quantity: 1 }, expect.any(String)));
+    await waitFor(() => expect(place).toHaveBeenCalledWith({ portfolio_id: 17, instrument_id: 5, side: "BUY", type: "MARKET", qty: 1 }, expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i)));
     await screen.findByText("42");
   });
 });

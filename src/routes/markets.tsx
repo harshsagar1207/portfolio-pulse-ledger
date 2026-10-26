@@ -54,6 +54,7 @@ function Markets() {
             </Select>
           ))}
         </div>
+        {q.priceError && <p role="alert" className="mb-4 text-sm text-loss">Live price updates unavailable; showing the last received prices.</p>}
         {q.isLoading ? <TableSkeleton /> : q.error ? <ErrorState error={q.error} onRetry={() => q.refetch()} /> : (
           <DataTable
             rows={rows}
