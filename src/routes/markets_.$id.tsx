@@ -2,9 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { OrderDialog } from "@/components/app/OrderDialog";
-import { DemoBadge, EmptyState, ErrorState, NotConnected, PageHeader, RequireApi, StatCard, TableSkeleton } from "@/components/app/states";
-import { inst, useInstruments } from "@/hooks/use-portfolio-data";
-import { fmtINR, fmtTime, humanize } from "@/lib/format";
+import { DemoBadge, EmptyState, ErrorState, PageHeader, RequireApi, StatCard, TableSkeleton } from "@/components/app/states";
+import { inst, useInstrument } from "@/hooks/use-portfolio-data";
+import { fmtINR, fmtTime, humanize, toNum } from "@/lib/format";
+import { PriceChart } from "@/components/app/PriceChart";
 
 export const Route = createFileRoute("/markets_/$id")({
   head: ({ params }) => ({
@@ -22,8 +23,8 @@ export const Route = createFileRoute("/markets_/$id")({
 
 function InstrumentDetail() {
   const { id } = Route.useParams();
-  const q = useInstruments();
-  const r = (q.data ?? []).find((x) => inst.id(x) === id);
+  const q = useInstrument(id);
+  const r = q.data;
   const tradable = r ? inst.tradable(r) !== false && !inst.cls(r).includes("INDEX") : false;
   return (
     <><Button asChild variant="link" size="sm" className="mb-3 px-0"><Link to="/markets"><ArrowLeft />Markets</Link></Button><RequireApi>
@@ -32,13 +33,14 @@ function InstrumentDetail() {
           <PageHeader title={inst.symbol(r)} description={`${inst.name(r)} · ${inst.cls(r) || "—"} · ${inst.exchange(r)}`}
             actions={tradable && (
               <>
-                <OrderDialog instrumentId={id} symbol={inst.symbol(r)} price={inst.price(r)} defaultSide="BUY" trigger={<Button>Buy</Button>} />
-                <OrderDialog instrumentId={id} symbol={inst.symbol(r)} price={inst.price(r)} defaultSide="SELL" trigger={<Button variant="outline">Sell</Button>} />
+                <OrderDialog instrumentId={id} symbol={inst.symbol(r)} price={inst.price(r)} lotSize={toNum(r["lot_size"])} tickSize={toNum(r["tick_size"])} defaultSide="BUY" trigger={<Button>Buy</Button>} />
+                <OrderDialog instrumentId={id} symbol={inst.symbol(r)} price={inst.price(r)} lotSize={toNum(r["lot_size"])} tickSize={toNum(r["tick_size"])} defaultSide="SELL" trigger={<Button variant="outline">Sell</Button>} />
               </>
             )} />
           <div className="mb-6 grid gap-3 md:grid-cols-3">
             <StatCard label="Latest price" value={fmtINR(inst.price(r))} hint={<>As of {fmtTime(inst.ts(r))} · <DemoBadge /></>} />
           </div>
+          {q.priceError && <p role="alert" className="mb-4 text-sm text-loss">Live price updates unavailable; showing the last received price.</p>}
           <div className="mb-6 rounded-lg border bg-card">
             <dl className="grid divide-y sm:grid-cols-2 sm:divide-y-0">
               {Object.entries(r).filter(([, v]) => v !== null && typeof v !== "object").map(([k, v]) => (
@@ -48,7 +50,7 @@ function InstrumentDetail() {
               ))}
             </dl>
           </div>
-          <NotConnected feature="Historical price chart" detail="No verified historical-prices endpoint. The chart will appear once one is exposed." />
+          <PriceChart id={id} />
         </>
       )}
     </RequireApi></>

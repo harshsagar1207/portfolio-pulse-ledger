@@ -121,7 +121,20 @@ export const api = {
     apiRequest<Record<string, unknown>>("/auth/login", { method: "POST", body, auth: false }),
   register: (body: Record<string, unknown>) =>
     apiRequest<Record<string, unknown>>("/auth/register", { method: "POST", body, auth: false }),
-  instruments: () => apiRequest<unknown>("/instruments").then((b) => asList(b)),
+  instruments: () => apiRequest<unknown>("/instruments", { auth: false }).then((b) => asList(b)),
+  instrument: (id: string) => apiRequest<Record<string, unknown>>(`/instruments/${encodeURIComponent(id)}`, { auth: false }),
+  prices: () => apiRequest<unknown>("/prices", { auth: false }).then((b) => asList(b)),
+  priceHistory: (id: string) => apiRequest<unknown>(`/instruments/${encodeURIComponent(id)}/prices?limit=300`, { auth: false }).then((b) => asList(b)),
+  trades: (id: string) => apiRequest<unknown>(`/portfolios/${encodeURIComponent(id)}/trades`).then((b) => asList(b)),
+  ledger: (id: string) => apiRequest<unknown>(`/portfolios/${encodeURIComponent(id)}/ledger`).then((b) => asList(b)),
+  realizedPnl: (id: string) => apiRequest<unknown>(`/portfolios/${encodeURIComponent(id)}/realized-pnl`).then((b) => asList(b)),
+  orders: (portfolioId: string, status: string) => {
+    const search = new URLSearchParams();
+    if (portfolioId) search.set("portfolio_id", portfolioId);
+    if (status) search.set("status", status);
+    return apiRequest<unknown>(`/orders${search.size ? `?${search}` : ""}`).then((b) => asList(b));
+  },
+  cancelOrder: (id: string) => apiRequest<unknown>(`/orders/${encodeURIComponent(id)}`, { method: "DELETE" }),
   portfolio: (id: string) => apiRequest<Record<string, unknown>>(`/portfolios/${encodeURIComponent(id)}`),
   placeOrder: (body: Record<string, unknown>, idempotencyKey: string) =>
     apiRequest<Record<string, unknown>>("/orders", { method: "POST", body, idempotencyKey }),

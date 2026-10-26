@@ -76,7 +76,7 @@ function Dashboard() {
           {ins.isLoading ? <TableSkeleton rows={2} /> : ins.error ? <div className="col-span-full"><ErrorState error={ins.error} onRetry={() => ins.refetch()} /></div> : indices.length ? indices.map((r) => {
             const pr = inst.price(r), prev = inst.prev(r);
             const ch = pr !== null && prev ? ((pr - prev) / prev) * 100 : null;
-            return <StatCard key={inst.id(r)} label={inst.name(r)} value={fmtNum(pr)} hint={<Delta value={ch}>{ch === null ? "change n/a" : fmtPct(ch)}</Delta>} />;
+            return <StatCard key={inst.id(r)} label={inst.name(r)} value={fmtNum(pr)} hint={<><Delta value={ch}>{ch === null ? "change n/a" : fmtPct(ch)}</Delta><p>As of {fmtTime(inst.ts(r))}</p></>} />;
           }) : <p className="col-span-full text-sm text-muted-foreground">No index instruments returned by the API.</p>}
         </section>
 
@@ -116,7 +116,7 @@ function Dashboard() {
             </section>
             <h2 className="mb-3 text-sm font-semibold">Current holdings</h2>
             <DataTable rows={positions} columns={holdingCols()} emptyTitle="No holdings in this portfolio" pageSize={8} />
-            <p className="mt-2 text-xs text-muted-foreground">Prices last refreshed {ins.dataUpdatedAt ? fmtTime(new Date(ins.dataUpdatedAt).toISOString()) : "—"} · simulated feed</p>
+            <p className="mt-2 text-xs text-muted-foreground">Prices last refreshed {ins.priceUpdatedAt ? fmtTime(new Date(ins.priceUpdatedAt).toISOString()) : "—"} · simulated feed</p>
           </>
         )}
       </RequireApi>}

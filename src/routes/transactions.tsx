@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { NotConnected, PageHeader } from "@/components/app/states";
+import { PageHeader, RequireApi } from "@/components/app/states";
+import { PortfolioPicker, useSelectedPortfolio } from "@/components/app/PortfolioPicker";
+import { PortfolioHistory } from "@/components/app/PortfolioHistory";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const Route = createFileRoute("/transactions")({
   head: () => ({
@@ -16,10 +19,17 @@ export const Route = createFileRoute("/transactions")({
 });
 
 function TransactionsPage() {
+  const { id, setId } = useSelectedPortfolio();
   return (
     <>
       <PageHeader title="Transactions" description="Executed trades and cash-ledger history." />
-      <NotConnected feature="Trade & cash-ledger history" detail="No verified endpoint lists trades or ledger entries yet. Executed trades will appear here once exposed." />
+      <RequireApi>
+        <div className="mb-5"><PortfolioPicker id={id} onChange={setId} /></div>
+        <Tabs defaultValue="trades"><TabsList className="mb-4"><TabsTrigger value="trades">Executed trades</TabsTrigger><TabsTrigger value="ledger">Cash ledger</TabsTrigger></TabsList>
+          <TabsContent value="trades"><PortfolioHistory id={id} kind="trades" /></TabsContent>
+          <TabsContent value="ledger"><PortfolioHistory id={id} kind="ledger" /></TabsContent>
+        </Tabs>
+      </RequireApi>
     </>
   );
 }

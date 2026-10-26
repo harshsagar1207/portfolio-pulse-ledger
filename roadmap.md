@@ -3,4 +3,10 @@
 - [x] Refine navigation, tables, portfolio and order controls.
 - [x] Complete page metadata and check tests and browser flows.
 
-Live account verification is blocked by the missing Portfolio API connection; no financial data or successful API responses are simulated in the app.
+## API frontend update
+- [ ] Connect live prices and instrument chart.
+- [ ] Connect order history and cancellation; correct order payload and increment validation.
+- [ ] Connect trades, cash ledger and realized P&L with portfolio selection.
+- [ ] Run rule tests and verify available browser flows.
+
+Live account verification requires the Portfolio API connection; no financial data or successful API responses are simulated in the app.

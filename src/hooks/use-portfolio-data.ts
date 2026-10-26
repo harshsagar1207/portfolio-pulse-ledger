@@ -7,14 +7,33 @@ import { pick, toNum } from "@/lib/format";
 const enabled = () => typeof window !== "undefined" && isApiConfigured();
 
 export const POLL_MS = 30_000;
+export const PRICE_POLL_MS = 2_000;
+export const CHART_POLL_MS = 15_000;
 
 export type Row = Record<string, unknown>;
 
 export function useInstruments() {
-  return useQuery({ queryKey: ["instruments"], queryFn: api.instruments, enabled: enabled(), refetchInterval: POLL_MS });
+  const q = useQuery({ queryKey: ["instruments"], queryFn: api.instruments, enabled: enabled(), refetchInterval: POLL_MS });
+  const prices = usePrices();
+  return { ...q, data: q.data?.map((r) => mergeLivePrice(r, prices.data)), priceError: prices.error, priceUpdatedAt: prices.dataUpdatedAt };
+}
+export function mergeLivePrice(r: Row, prices: Row[] | undefined): Row {
+  const p = prices?.find((x) => String(x["instrument_id"]) === inst.id(r));
+  return p ? { ...r, latest_price: p["price"], last_price: p["price"], price_ts: p["ts"] } : r;
+}
+export function usePrices() {
+  return useQuery({ queryKey: ["prices"], queryFn: api.prices, enabled: enabled(), refetchInterval: PRICE_POLL_MS });
+}
+export function useInstrument(id: string) {
+  const q = useQuery({ queryKey: ["instrument", id], queryFn: () => api.instrument(id), enabled: enabled() && !!id, refetchInterval: POLL_MS });
+  const prices = usePrices();
+  return { ...q, data: q.data ? mergeLivePrice(q.data, prices.data) : undefined, priceError: prices.error };
+}
+export function usePriceHistory(id: string) {
+  return useQuery({ queryKey: ["price-history", id], queryFn: () => api.priceHistory(id), enabled: enabled() && !!id, refetchInterval: CHART_POLL_MS });
 }
 export function usePortfolio(id: string | null) {
-  return useQuery({ queryKey: ["portfolio", id], queryFn: () => { if (!id) throw new Error("Portfolio ID is required"); return api.portfolio(id); }, enabled: enabled() && !!id });
+  return useQuery({ queryKey: ["portfolio", id], queryFn: () => { if (!id) throw new Error("Portfolio ID is required"); return api.portfolio(id); }, enabled: enabled() && !!id, refetchInterval: PRICE_POLL_MS });
 }
 export function useAudit() {
   return useQuery({ queryKey: ["audit"], queryFn: api.audit, enabled: enabled() });
