@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api";
 import { fmtINR, pick } from "@/lib/format";
-import { orderSchema, type OrderInput } from "@/lib/order";
+import { createOrderSchema, orderPayload, type OrderInput } from "@/lib/order";
+import type { z } from "zod";
 import { usePortfolioIds } from "@/hooks/use-portfolio-data";
 import { StatusBadge } from "./states";
 import { cn } from "@/lib/utils";
@@ -22,8 +23,8 @@ export const loadSessionOrders = (): SubmittedOrder[] => {
 };
 const saveOrder = (o: SubmittedOrder) => { try { sessionStorage.setItem(SKEY, JSON.stringify([o, ...loadSessionOrders()].slice(0, 50))); } catch { /* Receipt remains visible even if browser storage is unavailable. */ } };
 
-export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", trigger }: {
-  instrumentId: string; symbol: string; price: number | null; defaultSide?: "BUY" | "SELL"; trigger: React.ReactNode;
+export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, defaultSide = "BUY", trigger }: {
+  instrumentId: string; symbol: string; price: number | null; lotSize?: number | null; tickSize?: number | null; defaultSide?: "BUY" | "SELL"; trigger: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState<OrderInput | null>(null);
@@ -32,9 +33,11 @@ export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", 
   const { ids } = usePortfolioIds();
   const qc = useQueryClient();
 
-  const form = useForm<OrderInput>({
-    resolver: zodResolver(orderSchema),
-    defaultValues: { portfolio_id: ids[0] ?? "", instrument_id: instrumentId, side: defaultSide, order_type: "MARKET", quantity: 1 },
+  const schema = createOrderSchema(lotSize, tickSize);
+  const form = useForm<z.input<typeof schema>, unknown, OrderInput>({
+    resolver: zodResolver(schema),
+    shouldUnregister: true,
+    defaultValues: { portfolio_id: ids[0] ?? "", instrument_id: instrumentId, side: defaultSide, order_type: "MARKET", quantity: lotSize ?? 1 },
   });
   const v = form.watch();
   useEffect(() => {
@@ -46,18 +49,13 @@ export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", 
   const m = useMutation({
     mutationFn: (o: OrderInput) =>
       api.placeOrder(
-        {
-          portfolio_id: isNaN(Number(o.portfolio_id)) ? o.portfolio_id : Number(o.portfolio_id),
-          instrument_id: isNaN(Number(o.instrument_id)) ? o.instrument_id : Number(o.instrument_id),
-          side: o.side, order_type: o.order_type, quantity: o.quantity,
-          ...(o.order_type === "LIMIT" ? { limit_price: o.limit_price } : {}),
-        },
+        orderPayload(o),
         idemKey.current,
       ),
     onSuccess: (res, o) => {
       const rec: SubmittedOrder = {
         order_id: String(pick(res, "order_id", "id") ?? "—"),
-        status: String(pick(res, "status", "state") ?? "NEW"),
+        status: String(pick(res, "status", "state") ?? "UNKNOWN"),
         symbol, side: o.side, quantity: o.quantity, at: new Date().toISOString(),
         message: pick(res, "message", "reject_reason") as string | undefined,
       };
@@ -66,6 +64,8 @@ export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", 
       setConfirm(null);
       idemKey.current = crypto.randomUUID();
       qc.invalidateQueries({ queryKey: ["portfolio"] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["portfolio-history"] });
       toast.success(`Order ${rec.order_id} ${rec.status.toLowerCase()}`);
     },
     onError: (e) => {
@@ -76,7 +76,7 @@ export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", 
 
   const reset = (o: boolean) => {
     setOpen(o);
-    if (!o) { setResult(null); setConfirm(null); }
+    if (!o) { setResult(null); setConfirm(null); m.reset(); }
   };
 
   return (
@@ -109,6 +109,8 @@ export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", 
           </div>
         ) : (
           <form className="space-y-4" onSubmit={form.handleSubmit((o) => setConfirm(o))}>
+            <input type="hidden" {...form.register("instrument_id")} />
+            {m.error && <p role="alert" className="text-sm text-loss">{m.error.message}</p>}
             <div className="grid grid-cols-2 gap-2">
               {(["BUY", "SELL"] as const).map((s) => (
                 <Button variant="outline" type="button" key={s} aria-pressed={v.side === s} onClick={() => form.setValue("side", s)}
@@ -124,9 +126,10 @@ export function OrderDialog({ instrumentId, symbol, price, defaultSide = "BUY", 
               ))}
             </div>
             <Field label="Portfolio ID" error={form.formState.errors.portfolio_id?.message}><Input {...form.register("portfolio_id")} /></Field>
-            <Field label="Quantity" error={form.formState.errors.quantity?.message}><Input type="number" step="any" {...form.register("quantity")} /></Field>
+            <Field label="Quantity" error={form.formState.errors.quantity?.message}><Input inputMode="decimal" {...form.register("quantity")} /></Field>
+            {lotSize && <p className="text-xs text-muted-foreground">Lot size: {lotSize}</p>}
             {v.order_type === "LIMIT" && (
-              <Field label="Limit price (₹)" error={form.formState.errors.limit_price?.message}><Input type="number" step="0.01" {...form.register("limit_price")} /></Field>
+              <Field label="Limit price (₹)" error={form.formState.errors.limit_price?.message}><Input inputMode="decimal" {...form.register("limit_price")} />{tickSize && <span className="text-xs text-muted-foreground">Tick size: {tickSize}</span>}</Field>
             )}
             <div className="flex justify-between rounded-md bg-muted px-3 py-2 text-sm">
               <span className="text-muted-foreground">Estimated value</span><span className="num font-medium">{fmtINR(est)}</span>
