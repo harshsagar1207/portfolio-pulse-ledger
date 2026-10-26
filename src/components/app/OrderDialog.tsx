@@ -36,15 +36,15 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, de
   const schema = createOrderSchema(lotSize, tickSize);
   const form = useForm<z.input<typeof schema>, unknown, OrderInput>({
     resolver: zodResolver(schema),
-    shouldUnregister: true,
     defaultValues: { portfolio_id: ids[0] ?? "", instrument_id: instrumentId, side: defaultSide, order_type: "MARKET", quantity: lotSize ?? 1 },
   });
   const v = form.watch();
   useEffect(() => {
     if (open && !form.getValues("portfolio_id") && ids[0]) form.setValue("portfolio_id", ids[0]);
   }, [open, ids, form]);
-  const unit = v.order_type === "LIMIT" ? Number(v.limit_price) : price;
-  const est = unit && Number(v.quantity) > 0 ? unit * Number(v.quantity) : null;
+  const values = confirm ?? v;
+  const unit = values.order_type === "LIMIT" ? Number(values.limit_price) : price;
+  const est = unit && Number(values.quantity) > 0 ? unit * Number(values.quantity) : null;
 
   const m = useMutation({
     mutationFn: (o: OrderInput) =>
@@ -76,6 +76,7 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, de
 
   const reset = (o: boolean) => {
     setOpen(o);
+    if (!o && m.isPending) return;
     if (!o) { setResult(null); setConfirm(null); m.reset(); }
   };
 
@@ -121,7 +122,7 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, de
             </div>
             <div className="grid grid-cols-2 gap-2">
               {(["MARKET", "LIMIT"] as const).map((t) => (
-                <Button variant="outline" type="button" key={t} aria-pressed={v.order_type === t} onClick={() => form.setValue("order_type", t)}
+                <Button variant="outline" type="button" key={t} aria-pressed={v.order_type === t} onClick={() => { form.setValue("order_type", t); if (t === "MARKET") form.setValue("limit_price", undefined); }}
                   className={cn("rounded-md border py-1.5 text-xs font-medium", v.order_type === t && "border-primary bg-accent")}>{t}</Button>
               ))}
             </div>
@@ -129,7 +130,7 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, de
             <Field label="Quantity" error={form.formState.errors.quantity?.message}><Input inputMode="decimal" {...form.register("quantity")} /></Field>
             {lotSize && <p className="text-xs text-muted-foreground">Lot size: {lotSize}</p>}
             {v.order_type === "LIMIT" && (
-              <Field label="Limit price (₹)" error={form.formState.errors.limit_price?.message}><Input inputMode="decimal" {...form.register("limit_price")} />{tickSize && <span className="text-xs text-muted-foreground">Tick size: {tickSize}</span>}</Field>
+              <Field label="Limit price (₹)" error={form.formState.errors.limit_price?.message}><Input inputMode="decimal" {...form.register("limit_price", { setValueAs: (value: unknown) => value === "" ? undefined : value })} />{tickSize && <span className="text-xs text-muted-foreground">Tick size: {tickSize}</span>}</Field>
             )}
             <div className="flex justify-between rounded-md bg-muted px-3 py-2 text-sm">
               <span className="text-muted-foreground">Estimated value</span><span className="num font-medium">{fmtINR(est)}</span>
