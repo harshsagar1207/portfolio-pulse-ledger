@@ -9,6 +9,6 @@ describe("simulator price contract", () => {
     const prices = [{ instrument_id: 5, price: 101.5, ts: "2026-10-26T13:47:00Z" }];
     const merged = mergeLivePrice(row, prices);
     expect(inst.price(merged)).toBe(101.5); expect(inst.ts(merged)).toBe("2026-10-26T13:47:00Z");
-    expect(mergeLivePrice({ ...row, instrument_id: 6 }, prices).last_price).toBe(100);
+    expect(mergeLivePrice({ ...row, instrument_id: 6 }, prices)["last_price"]).toBe(100);
   });
 });
