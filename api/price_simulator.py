@@ -182,6 +182,17 @@ ON CONFLICT DO NOTHING"""
 SQL_SUBS_UPDATE = """
 UPDATE ipo SET subscription_x = t.x FROM unnest(%s::bigint[], %s::numeric[]) AS t(id, x)
 WHERE ipo.instrument_id = t.id"""
+SQL_VALUE_SNAPSHOT = """
+WITH v AS (
+  SELECT p.portfolio_id,
+         COALESCE((SELECT sum(c.balance) FROM cash_account c WHERE c.portfolio_id = p.portfolio_id), 0) AS cash,
+         COALESCE((SELECT sum(po.qty * lp.price) FROM position po
+                   JOIN latest_price lp USING (instrument_id) WHERE po.portfolio_id = p.portfolio_id), 0) AS holdings
+  FROM portfolio p)
+INSERT INTO portfolio_value_history (portfolio_id, ts, cash, holdings, total)
+SELECT portfolio_id, date_trunc('minute', now()), cash, holdings, cash + holdings FROM v
+WHERE cash + holdings > 0
+ON CONFLICT DO NOTHING"""
 SQL_HEARTBEAT = """
 INSERT INTO price_feed_state (source, last_success_at) VALUES ('simulator', now())
 ON CONFLICT (source) DO UPDATE SET last_success_at = now(), last_error = NULL"""
@@ -235,6 +246,7 @@ def main():
         market.subscription = {r[0]: float(r[1] or 0) for r in cur.fetchall()}
         conn.commit()
         candles, vrng = Candles(), random.Random(args.seed)
+        last_snap = 0.0
         started = time.monotonic()
         print(f"simulating {len(insts)} instruments, interval={args.interval}s, vol-mult={args.vol_mult}")
 
@@ -259,6 +271,13 @@ def main():
                     cur.execute(SQL_SUBS_UPDATE, (list(subs), list(subs.values())))
                 flush_candles(cur, [(i, c) for i, c in finished])
                 cur.execute(SQL_HEARTBEAT)
+                if time.monotonic() - last_snap >= 60:
+                    last_snap = time.monotonic()
+                    try:
+                        with conn.transaction():          # savepoint: a missing table must not stop prices
+                            cur.execute(SQL_VALUE_SNAPSHOT)
+                    except Exception as e:
+                        print("value snapshot skipped:", str(e).splitlines()[0])
                 conn.commit()
             if args.duration and time.monotonic() - started >= args.duration:
                 break

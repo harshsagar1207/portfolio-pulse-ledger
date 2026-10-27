@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { NotConnected, PageHeader } from "@/components/app/states";
+import { PageHeader, RequireApi } from "@/components/app/states";
+import { PortfolioPicker, useSelectedPortfolio } from "@/components/app/PortfolioPicker";
+import { PortfolioHistory } from "@/components/app/PortfolioHistory";
+import { PortfolioValueHistory } from "@/components/app/PortfolioValueHistory";
 
 export const Route = createFileRoute("/reports")({
   head: () => ({
@@ -16,10 +19,23 @@ export const Route = createFileRoute("/reports")({
 });
 
 function ReportsPage() {
+  const { id, setId } = useSelectedPortfolio();
   return (
     <>
       <PageHeader title="Reports" description="Holdings, P&L, order and ledger reports." />
-      <NotConnected feature="Reports" detail="Value history, realized P&L, and ledger reports need endpoints that are not yet verified. Holdings can be exported as CSV from each portfolio page." />
+      <RequireApi>
+        <div className="mb-5">
+          <PortfolioPicker id={id} onChange={setId} />
+        </div>
+        <section className="mb-8">
+          <h2 className="mb-3 text-base font-semibold">Realized P&L</h2>
+          <PortfolioHistory id={id} kind="realizedPnl" />
+        </section>
+        <section>
+          <h2 className="mb-3 text-base font-semibold">Portfolio value history</h2>
+          <PortfolioValueHistory id={id} />
+        </section>
+      </RequireApi>
     </>
   );
 }

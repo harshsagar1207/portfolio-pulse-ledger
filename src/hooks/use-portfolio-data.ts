@@ -1,20 +1,95 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api, isApiConfigured } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { pick, toNum } from "@/lib/format";
 
 // Reads are client-only: the session token lives in the browser, so these do not run during SSR.
 const enabled = () => typeof window !== "undefined" && isApiConfigured();
 
 export const POLL_MS = 30_000;
+export const PRICE_POLL_MS = 2_000;
+export const CHART_POLL_MS = 15_000;
 
 export type Row = Record<string, unknown>;
 
 export function useInstruments() {
-  return useQuery({ queryKey: ["instruments"], queryFn: api.instruments, enabled: enabled(), refetchInterval: POLL_MS });
+  const q = useQuery({
+    queryKey: ["instruments"],
+    queryFn: api.instruments,
+    enabled: enabled(),
+    refetchInterval: POLL_MS,
+  });
+  const prices = usePrices();
+  return {
+    ...q,
+    data: q.data?.map((r) => mergeLivePrice(r, prices.data)),
+    priceError: prices.error,
+    priceUpdatedAt: prices.dataUpdatedAt,
+  };
+}
+export function mergeLivePrice(r: Row, prices: Row[] | undefined): Row {
+  const p = prices?.find((x) => String(x["instrument_id"]) === inst.id(r));
+  return p ? { ...r, latest_price: p["price"], last_price: p["price"], price_ts: p["ts"] } : r;
+}
+export function usePrices() {
+  return useQuery({
+    queryKey: ["prices"],
+    queryFn: api.prices,
+    enabled: enabled(),
+    refetchInterval: PRICE_POLL_MS,
+  });
+}
+export function useInstrument(id: string) {
+  const q = useQuery({
+    queryKey: ["instrument", id],
+    queryFn: () => api.instrument(id),
+    enabled: enabled() && !!id,
+    refetchInterval: POLL_MS,
+  });
+  const prices = usePrices();
+  return {
+    ...q,
+    data: q.data ? mergeLivePrice(q.data, prices.data) : undefined,
+    priceError: prices.error,
+  };
+}
+export function usePriceHistory(id: string) {
+  return useQuery({
+    queryKey: ["price-history", id],
+    queryFn: () => api.priceHistory(id),
+    enabled: enabled() && !!id,
+    refetchInterval: CHART_POLL_MS,
+  });
+}
+export function useValueHistory(id: string) {
+  const { session, ready } = useAuth();
+  return useQuery({
+    queryKey: ["value-history", id, session?.token],
+    queryFn: () => api.valueHistory(id),
+    enabled: ready && !!session?.token && enabled() && !!id,
+    refetchInterval: CHART_POLL_MS,
+  });
+}
+export function useWatchlist() {
+  const { session, ready } = useAuth();
+  return useQuery({
+    queryKey: ["watchlist", session?.token],
+    queryFn: api.watchlist,
+    enabled: ready && !!session?.token && enabled(),
+    refetchInterval: PRICE_POLL_MS,
+  });
 }
 export function usePortfolio(id: string | null) {
-  return useQuery({ queryKey: ["portfolio", id], queryFn: () => { if (!id) throw new Error("Portfolio ID is required"); return api.portfolio(id); }, enabled: enabled() && !!id });
+  return useQuery({
+    queryKey: ["portfolio", id],
+    queryFn: () => {
+      if (!id) throw new Error("Portfolio ID is required");
+      return api.portfolio(id);
+    },
+    enabled: enabled() && !!id,
+    refetchInterval: PRICE_POLL_MS,
+  });
 }
 export function useAudit() {
   return useQuery({ queryKey: ["audit"], queryFn: api.audit, enabled: enabled() });
@@ -23,14 +98,21 @@ export function useReconcile() {
   return useQuery({ queryKey: ["reconcile"], queryFn: api.reconcile, enabled: enabled() });
 }
 export function useHealth() {
-  return useQuery({ queryKey: ["health"], queryFn: api.health, enabled: enabled(), refetchInterval: 60_000, retry: false });
+  return useQuery({
+    queryKey: ["health"],
+    queryFn: api.health,
+    enabled: enabled(),
+    refetchInterval: 60_000,
+    retry: false,
+  });
 }
 
 export const inst = {
   id: (r: Row) => String(pick(r, "instrument_id", "id") ?? ""),
   symbol: (r: Row) => String(pick(r, "symbol", "ticker", "code") ?? "—"),
   name: (r: Row) => String(pick(r, "name", "instrument_name", "scheme_name") ?? "—"),
-  cls: (r: Row) => String(pick(r, "asset_class", "instrument_type", "type", "category") ?? "").toUpperCase(),
+  cls: (r: Row) =>
+    String(pick(r, "asset_class", "instrument_type", "type", "category") ?? "").toUpperCase(),
   exchange: (r: Row) => String(pick(r, "exchange", "exchange_code") ?? "—"),
   sector: (r: Row) => String(pick(r, "sector", "industry") ?? "—"),
   price: (r: Row) => toNum(pick(r, "latest_price", "last_price", "price", "nav", "ltp")),
@@ -48,9 +130,16 @@ const PKEY = "spms.portfolioIds";
 export function usePortfolioIds() {
   const [ids, setIds] = useState<string[]>([]);
   useEffect(() => {
-    try { setIds(JSON.parse(localStorage.getItem(PKEY) ?? "[]")); } catch { /* ignore */ }
+    try {
+      setIds(JSON.parse(localStorage.getItem(PKEY) ?? "[]"));
+    } catch {
+      /* ignore */
+    }
   }, []);
-  const save = (next: string[]) => { setIds(next); localStorage.setItem(PKEY, JSON.stringify(next)); };
+  const save = (next: string[]) => {
+    setIds(next);
+    localStorage.setItem(PKEY, JSON.stringify(next));
+  };
   return {
     ids,
     add: (id: string) => !ids.includes(id) && save([...ids, id]),
@@ -67,6 +156,7 @@ export function positionsOf(p: Row | undefined): Row[] {
 export function cashOf(p: Row | undefined): Row | undefined {
   if (!p) return undefined;
   const c = pick(p, "cash", "cash_account", "cash_balance");
+  if (Array.isArray(c)) return c[0] as Row | undefined;
   if (c && typeof c === "object") return c as Row;
   return p;
 }

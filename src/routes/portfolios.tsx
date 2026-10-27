@@ -1,11 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { EmptyState, PageHeader, RequireApi } from "@/components/app/states";
+import {
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  RequireApi,
+  TableSkeleton,
+} from "@/components/app/states";
 import { usePortfolioIds } from "@/hooks/use-portfolio-data";
-import { api } from "@/lib/api";
+import { api, isApiConfigured } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/portfolios")({
   head: () => ({
@@ -23,41 +30,68 @@ export const Route = createFileRoute("/portfolios")({
 
 function Portfolios() {
   const { ids, add, remove } = usePortfolioIds();
-  const [v, setV] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const openPortfolio = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const id = v.trim();
-    if (!id || busy) return;
-    setBusy(true); setError(null);
-    try { await api.portfolio(id); add(id); setV(""); }
-    catch (e) { setError(e instanceof Error ? e.message : "Portfolio could not be opened."); }
-    finally { setBusy(false); }
-  };
+  const { session, ready } = useAuth();
+  const q = useQuery({
+    queryKey: ["portfolios", session?.token],
+    queryFn: api.portfolios,
+    enabled: ready && !!session?.token && isApiConfigured(),
+  });
+  useEffect(() => {
+    q.data?.forEach((portfolio) => add(String(portfolio.portfolio_id)));
+  }, [q.data]);
   return (
     <>
-      <PageHeader title="My Portfolios" description="Saved portfolio IDs · holdings and cash" />
+      <PageHeader title="My Portfolios" description="Your named portfolios, holdings and cash" />
       <RequireApi>
-        <form className="mb-3 flex max-w-md gap-2" onSubmit={openPortfolio}>
-          <Input placeholder="Portfolio ID" value={v} onChange={(e) => setV(e.target.value)} aria-label="Portfolio ID" disabled={busy} required />
-          <Button type="submit" disabled={busy || !v.trim()}>{busy ? "Opening…" : "Open"}</Button>
-        </form>
-        {error && <p role="alert" className="mb-4 text-sm text-loss">{error}</p>}
-        {ids.length ? (
+        {!ready ? (
+          <TableSkeleton />
+        ) : !session?.token ? (
+          <EmptyState title="Sign in to view your portfolios">
+            <Button asChild className="mt-4">
+              <Link to="/login">Sign in</Link>
+            </Button>
+          </EmptyState>
+        ) : q.isPending ? (
+          <TableSkeleton />
+        ) : q.error ? (
+          <ErrorState error={q.error} onRetry={() => q.refetch()} />
+        ) : q.data?.length ? (
           <div className="divide-y rounded-lg border bg-card">
-            {ids.map((id, i) => (
-              <div key={id} className="flex items-center gap-3 px-4 py-3">
-                <Link to="/portfolios/$id" params={{ id }} className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-                  <span className="num min-w-0 break-all font-medium">#{id}</span>
-                  {i === 0 && <span className="rounded bg-accent px-1.5 text-[11px]">Dashboard default</span>}
-                  <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
-                </Link>
-                <Button variant="ghost" size="icon" aria-label={`Remove ${id}`} onClick={() => remove(id)}><X className="h-4 w-4" /></Button>
-              </div>
-            ))}
+            {q.data.map((portfolio, i) => {
+              const id = String(portfolio.portfolio_id);
+              return (
+                <div key={id} className="flex items-center gap-3 px-4 py-3">
+                  <Link
+                    to="/portfolios/$id"
+                    params={{ id }}
+                    className="flex min-w-0 flex-1 flex-wrap items-center gap-3"
+                  >
+                    <span className="min-w-0 break-words font-medium">{portfolio.name}</span>
+                    <span className="text-xs text-muted-foreground">{portfolio.base_currency}</span>
+                    {i === 0 && (
+                      <span className="rounded bg-accent px-1.5 text-[11px]">
+                        Dashboard default
+                      </span>
+                    )}
+                    <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground" />
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove ${id}`}
+                    onClick={() => remove(id)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              );
+            })}
           </div>
-        ) : <EmptyState title="No portfolios opened">Enter a portfolio ID you own. The backend enforces ownership.</EmptyState>}
+        ) : (
+          <EmptyState title="No portfolios yet">
+            Create one while placing an order, then return here to see it by name.
+          </EmptyState>
+        )}
       </RequireApi>
     </>
   );

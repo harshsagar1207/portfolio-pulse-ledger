@@ -23,6 +23,30 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+def _load_env():
+    """Load KEY=VALUE pairs from the nearest .env (api dir, its parents, or cwd) before pg reads them."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    up1 = os.path.dirname(here)
+    seen = []
+    for d in (here, up1, os.path.dirname(up1), os.getcwd()):
+        p = os.path.join(d, ".env")
+        if p in seen or not os.path.isfile(p):
+            continue
+        seen.append(p)
+        with open(p, encoding="utf-8-sig") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k, v = k.strip().removeprefix("export ").strip(), v.strip().strip('"').strip("'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    print(f"[pf] .env files read: {seen or 'none'}; PGPASSWORD {'set' if os.environ.get('PGPASSWORD') else 'MISSING'}")
+
+
+_load_env()
+
 import pg
 import security as sec
 
@@ -62,15 +86,20 @@ def internal_error(request: Request, exc: Exception):
 
 
 def money(v, field, places=4, positive=True):
-    if isinstance(v, bool) or not re.fullmatch(r"\d+(\.\d+)?|\.\d+", str(v).strip()) and not (
-            positive is False and re.fullmatch(r"-?\d+(\.\d+)?", str(v).strip())):
-        raise HTTPException(422, f"{field} must be a plain decimal number")
+    """Accepts JSON ints/floats or numeric strings ('100', 100, 100.0, '100.00' all fine)."""
+    if v is None or isinstance(v, bool) or not isinstance(v, (int, float, str)):
+        raise HTTPException(422, f"{field} must be a number (got {v!r})")
+    s = format(Decimal(repr(v)), "f") if isinstance(v, float) else str(v).strip().replace(",", "")
     try:
-        d = Decimal(str(v).strip())
+        d = Decimal(s)
     except (InvalidOperation, ValueError):
-        raise HTTPException(422, f"{field} must be a decimal number")
-    if not d.is_finite() or (positive and d <= 0) or -d.as_tuple().exponent > places:
-        raise HTTPException(422, f"{field} must be positive with at most {places} decimals")
+        raise HTTPException(422, f"{field} must be a plain decimal number (got {v!r})")
+    if not d.is_finite():
+        raise HTTPException(422, f"{field} must be a finite number")
+    if positive and d <= 0:
+        raise HTTPException(422, f"{field} must be greater than 0")
+    if -d.normalize().as_tuple().exponent > places:
+        raise HTTPException(422, f"{field} allows at most {places} decimals")
     return d
 
 
@@ -224,6 +253,22 @@ def list_portfolios(c):
         "SELECT portfolio_id, name, base_currency FROM portfolio ORDER BY portfolio_id")))
 
 
+def create_portfolio(c, b):
+    name = str((b or {}).get("name") or "").strip()
+    cur = str((b or {}).get("base_currency") or "INR").strip().upper()
+    if not name or len(name) > 60:
+        raise HTTPException(422, "name is required (max 60 chars)")
+    if len(cur) != 3 or not cur.isalpha():
+        raise HTTPException(422, "base_currency must be a 3-letter code")
+    return Json(run(APP, c, lambda cn: cn.one(
+        "INSERT INTO portfolio (user_id, name, base_currency) VALUES (app_uid(), $1, $2) "
+        "RETURNING portfolio_id, name, base_currency", (name, cur))), 201)
+
+
+async def create_portfolio_h(request):
+    return await _wrapped(lambda request, c, b: create_portfolio(c, b), request, with_body=True)
+
+
 def portfolio_view(c, pid):
     def go(cn):
         p = cn.one("SELECT portfolio_id, name, base_currency FROM portfolio WHERE portfolio_id=$1", (pid,))
@@ -232,16 +277,22 @@ def portfolio_view(c, pid):
         cash = cn.execute("SELECT currency, balance, reserved, balance - reserved AS available "
                           "FROM cash_account WHERE portfolio_id=$1", (pid,))
         pos = cn.execute(
-            "SELECT i.symbol, p.qty, p.reserved_qty, p.avg_cost, lp.price AS last_price, "
+            "SELECT p.instrument_id, i.symbol, p.qty, p.reserved_qty, p.avg_cost, i.lot_size, i.tick_size, "
+            "       lp.price AS last_price, "
             "       round(p.qty * lp.price, 4) AS market_value, "
             "       round(p.qty * (lp.price - p.avg_cost), 4) AS unrealized_pnl "
             "FROM position p JOIN instrument i USING (instrument_id) "
             "LEFT JOIN latest_price lp USING (instrument_id) "
             "WHERE p.portfolio_id=$1 AND p.qty > 0 ORDER BY i.symbol", (pid,))
+        summary = cn.one(
+            "SELECT COALESCE(sum(p.qty * lp.price), 0) AS market_value, "
+            "COALESCE(sum(p.qty * p.avg_cost), 0) AS invested, "
+            "COALESCE(sum(p.qty * (lp.price - p.avg_cost)), 0) AS unrealized_pnl "
+            "FROM position p LEFT JOIN latest_price lp USING (instrument_id) WHERE p.portfolio_id=$1", (pid,))
         realized = cn.scalar(
             "SELECT COALESCE(sum(d.realized_pnl),0) FROM lot_disposal d "
             "JOIN trade t USING (trade_id) JOIN orders o USING (order_id) WHERE o.portfolio_id=$1", (pid,))
-        return {**p, "cash": cash, "positions": pos, "realized_pnl": realized}
+        return {**p, **summary, "cash": cash, "positions": pos, "realized_pnl": realized}
     return Json(run(APP, c, go))
 
 
@@ -300,7 +351,7 @@ def instruments(request):
     q = (qp.get("q") or "").strip()[:64] or None
     return Json(run(APP, None, lambda cn: cn.execute(
         "SELECT i.instrument_id, i.symbol, i.name, i.exchange, i.currency, i.asset_class, i.sector, "
-        "       i.tradable, i.underlying_id, lp.price AS last_price "
+        "       i.tradable, i.underlying_id, lp.price AS last_price, lp.ts AS price_ts "
         "FROM instrument i LEFT JOIN latest_price lp USING (instrument_id) "
         "WHERE ($1::text IS NULL OR i.asset_class = $1::text) "
         "  AND ($2::text IS NULL OR i.sector = $2::text) "
@@ -379,6 +430,94 @@ async def _wrapped(fn, request, need=None, with_body=False, public=False):
     except Exception as e:
         return internal_error(request, e)
 
+# ---------------------------------------------------------------- live prices, history, trades, ledger
+def latest_prices(request):
+    """Latest simulated price per instrument. Poll every 1-2 s. Optional ?asset_class=."""
+    ac = (request.query_params.get("asset_class") or "").strip().upper() or None
+    return Json(run(APP, None, lambda cn: cn.execute(
+        "SELECT lp.instrument_id, lp.price, lp.ts FROM latest_price lp "
+        "JOIN instrument i USING (instrument_id) WHERE ($1::text IS NULL OR i.asset_class=$1::text)", (ac,))))
+
+
+def instrument_detail(iid):
+    def go(cn):
+        r = cn.one("SELECT i.instrument_id, i.symbol, i.name, i.exchange, i.currency, i.asset_class, i.sector, "
+                   "i.tradable, i.lot_size, i.tick_size, lp.price AS last_price, lp.ts AS price_ts "
+                   "FROM instrument i LEFT JOIN latest_price lp USING (instrument_id) WHERE i.instrument_id=$1", (iid,))
+        if not r:
+            raise HTTPException(404, "instrument not found")
+        return r
+    return Json(run(APP, None, go))
+
+
+def price_history(request, iid):
+    """Candles, oldest first. ?limit=N (max 2000)."""
+    try:
+        lim = min(max(int(request.query_params.get("limit", "300")), 1), 2000)
+    except ValueError:
+        raise HTTPException(422, "limit must be an integer")
+    return Json(run(APP, None, lambda cn: cn.execute(
+        "SELECT * FROM (SELECT ts, open, high, low, close, volume FROM price_snapshot "
+        "WHERE instrument_id=$1 ORDER BY ts DESC LIMIT $2) t ORDER BY ts", (iid, lim))))
+
+
+def list_trades(c, pid):
+    return Json(run(APP, c, lambda cn: cn.execute(
+        "SELECT t.trade_id, t.order_id, i.symbol, o.side, t.qty, t.price, t.fee, t.executed_at "
+        "FROM trade t JOIN orders o USING (order_id) JOIN instrument i USING (instrument_id) "
+        "WHERE o.portfolio_id=$1 ORDER BY t.trade_id DESC LIMIT 500", (pid,))))
+
+
+def list_ledger(c, pid):
+    return Json(run(APP, c, lambda cn: cn.execute(
+        "SELECT l.entry_id, a.currency, l.entry_type, l.amount, l.balance_after, l.ref_type, l.ref_id, l.created_at "
+        "FROM cash_ledger l JOIN cash_account a USING (account_id) "
+        "WHERE a.portfolio_id=$1 ORDER BY l.entry_id DESC LIMIT 500", (pid,))))
+
+
+def realized_pnl(c, pid):
+    return Json(run(APP, c, lambda cn: cn.execute(
+        "SELECT i.symbol, sum(d.qty) AS qty, sum(d.proceeds) AS proceeds, sum(d.cost) AS cost, "
+        "sum(d.realized_pnl) AS realized_pnl FROM lot_disposal d JOIN tax_lot l USING (lot_id) "
+        "JOIN instrument i ON i.instrument_id=l.instrument_id "
+        "WHERE l.portfolio_id=$1 GROUP BY i.symbol ORDER BY i.symbol", (pid,))))
+
+
+def watchlist_list(c):
+    return Json(run(APP, c, lambda cn: cn.execute(
+        "SELECT w.instrument_id, i.symbol, i.name, i.exchange, i.currency, i.asset_class, "
+        "lp.price AS last_price, lp.ts AS price_ts, w.added_at "
+        "FROM watchlist w JOIN instrument i USING (instrument_id) "
+        "LEFT JOIN latest_price lp USING (instrument_id) ORDER BY w.added_at DESC")))
+
+
+def watchlist_add(c, iid):
+    def go(cn):
+        if not cn.one("SELECT 1 AS x FROM instrument WHERE instrument_id=$1", (iid,)):
+            raise HTTPException(404, "instrument not found")
+        cn.execute("INSERT INTO watchlist (user_id, instrument_id) VALUES (app_uid(), $1) "
+                   "ON CONFLICT DO NOTHING", (iid,))
+        return {"instrument_id": iid, "watching": True}
+    return Json(run(APP, c, go))
+
+
+def watchlist_remove(c, iid):
+    def go(cn):
+        cn.execute("DELETE FROM watchlist WHERE instrument_id=$1", (iid,))
+        return {"instrument_id": iid, "watching": False}
+    return Json(run(APP, c, go))
+
+
+def value_history(request, c, pid):
+    """Portfolio value over time (1-minute points), oldest first. ?limit=N (max 2000)."""
+    try:
+        lim = min(max(int(request.query_params.get("limit", "500")), 1), 2000)
+    except ValueError:
+        raise HTTPException(422, "limit must be an integer")
+    return Json(run(APP, c, lambda cn: cn.execute(
+        "SELECT * FROM (SELECT ts, cash, holdings, total FROM portfolio_value_history "
+        "WHERE portfolio_id=$1 ORDER BY ts DESC LIMIT $2) t ORDER BY ts", (pid, lim))))
+
 
 def route(path, fn, methods, **kw):
     async def h(request):
@@ -403,14 +542,101 @@ async def security_headers(request, call_next):
 
 from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
 
-app = Starlette(routes=[
+# ---------------------------------------------------------------- price simulator (started with the API)
+import subprocess
+import sys
+import threading
+
+_sim = {"proc": None, "matcher": None, "stop": False}
+
+
+def _sim_loop():
+    """Keeps price_simulator.py running. A second API worker exits harmlessly (advisory lock)."""
+    dsn = os.environ.get("PF_SIM_DSN") or os.environ.get("DATABASE_URL")
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "price_simulator.py")
+    if not dsn:
+        print("[pf] price simulator NOT started: set PF_SIM_DSN (owner/superuser DSN) in .env")
+        return
+    args = [sys.executable, script, "--dsn", dsn,
+            "--interval", os.environ.get("PF_SIM_INTERVAL", "1"),
+            "--vol-mult", os.environ.get("PF_SIM_VOL_MULT", "25")]
+    if os.environ.get("PF_SIM_SESSIONS_ONLY") == "1":
+        args.append("--sessions-only")
+    while not _sim["stop"]:
+        _sim["proc"] = subprocess.Popen(args)
+        print(f"[pf] price simulator started (pid {_sim['proc'].pid})")
+        while not _sim["stop"] and _sim["proc"].poll() is None:
+            time.sleep(1)
+
+
+def _matcher_loop():
+    """Runs the demo matcher beside the price simulator so accepted orders become trades."""
+    script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "worker", "matcher.py")
+    if not os.path.isfile(script):
+        print("[pf] matcher NOT started: worker/matcher.py is missing")
+        return
+    while not _sim["stop"]:
+        _sim["matcher"] = subprocess.Popen([sys.executable, script])
+        print(f"[pf] matcher started (pid {_sim['matcher'].pid})")
+        while not _sim["stop"] and _sim["matcher"].poll() is None:
+            time.sleep(1)
+        if _sim["stop"]:
+            break
+        time.sleep(2)
+        if _sim["stop"]:
+            break
+        for _ in range(10):                      # back off 10 s before retrying
+            if _sim["stop"]:
+                break
+            time.sleep(1)
+
+
+def start_simulator():
+    if os.environ.get("PF_RUN_SIMULATOR", "1") != "0":
+        threading.Thread(target=_sim_loop, daemon=True).start()
+    if os.environ.get("PF_RUN_MATCHER", "1") != "0":
+        threading.Thread(target=_matcher_loop, daemon=True).start()
+
+
+from contextlib import asynccontextmanager  # noqa: E402
+
+
+@asynccontextmanager
+async def _lifespan(_app):
+    start_simulator()
+    yield
+    stop_simulator()
+
+
+def stop_simulator():
+    _sim["stop"] = True
+    p = _sim["proc"]
+    if p and p.poll() is None:
+        p.terminate()                            # SIGTERM -> simulator flushes the last candle
+    matcher = _sim["matcher"]
+    if matcher and matcher.poll() is None:
+        matcher.terminate()
+
+
+app = Starlette(lifespan=_lifespan, routes=[
     route("/health", health, ["GET"], public=True),
     route("/auth/register", register, ["POST"], public=True, with_body=True),
     route("/auth/login", login, ["POST"], public=True, with_body=True),
     route("/auth/refresh", refresh, ["POST"], public=True, with_body=True),
     route("/auth/logout", logout, ["POST"], public=True, with_body=True),
     route("/instruments", instruments, ["GET"], public=True),
+    route("/prices", latest_prices, ["GET"], public=True),
+    route("/instruments/{iid:int}", instrument_detail, ["GET"], public=True),
+    route("/instruments/{iid:int}/prices", price_history, ["GET"], public=True),
+    route("/portfolios/{pid:int}/trades", list_trades, ["GET"]),
+    route("/portfolios/{pid:int}/ledger", list_ledger, ["GET"]),
+    route("/portfolios/{pid:int}/realized-pnl", realized_pnl, ["GET"]),
+    route("/watchlist", watchlist_list, ["GET"]),
+    route("/watchlist/{iid:int}", watchlist_add, ["PUT"]),
+    route("/watchlist/{iid:int}", watchlist_remove, ["DELETE"]),
+    route("/portfolios/{pid:int}/value-history", value_history, ["GET"]),
     route("/portfolios", list_portfolios, ["GET"]),
+    Route("/portfolios", create_portfolio_h, methods=["POST"]),
     route("/portfolios/{pid:int}", portfolio_view, ["GET"]),
     Route("/portfolios/{id:int}/deposit", deposit_h, methods=["POST"]),
     Route("/portfolios/{id:int}/withdraw", withdraw_h, methods=["POST"]),

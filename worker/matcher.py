@@ -14,8 +14,7 @@ from decimal import Decimal
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "api"))
 import pg  # noqa: E402
 
-DSN = (f"host={os.environ.get('PGHOST', '/tmp')} port={os.environ.get('PGPORT', '5433')} "
-       f"dbname={os.environ.get('PFDB', 'portfolio')} user=worker_role")
+DSN = pg.dsn("worker_role")
 
 
 def step(conn, partial=False):

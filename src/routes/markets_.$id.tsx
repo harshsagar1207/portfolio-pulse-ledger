@@ -1,10 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Star } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { OrderDialog } from "@/components/app/OrderDialog";
-import { DemoBadge, EmptyState, ErrorState, NotConnected, PageHeader, RequireApi, StatCard, TableSkeleton } from "@/components/app/states";
-import { inst, useInstruments } from "@/hooks/use-portfolio-data";
-import { fmtINR, fmtTime, humanize } from "@/lib/format";
+import {
+  DemoBadge,
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  RequireApi,
+  StatCard,
+  TableSkeleton,
+} from "@/components/app/states";
+import { inst, useInstrument, useWatchlist } from "@/hooks/use-portfolio-data";
+import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { fmtINR, fmtTime, humanize, toNum } from "@/lib/format";
+import { PriceChart } from "@/components/app/PriceChart";
 
 export const Route = createFileRoute("/markets_/$id")({
   head: ({ params }) => ({
@@ -22,35 +34,112 @@ export const Route = createFileRoute("/markets_/$id")({
 
 function InstrumentDetail() {
   const { id } = Route.useParams();
-  const q = useInstruments();
-  const r = (q.data ?? []).find((x) => inst.id(x) === id);
+  const q = useInstrument(id);
+  const { session } = useAuth();
+  const watchlist = useWatchlist();
+  const qc = useQueryClient();
+  const watched = (watchlist.data ?? []).some((item) => String(item["instrument_id"]) === id);
+  const toggleWatchlist = useMutation({
+    mutationFn: () => (watched ? api.removeFromWatchlist(id) : api.addToWatchlist(id)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["watchlist"] }),
+  });
+  const r = q.data;
   const tradable = r ? inst.tradable(r) !== false && !inst.cls(r).includes("INDEX") : false;
   return (
-    <><Button asChild variant="link" size="sm" className="mb-3 px-0"><Link to="/markets"><ArrowLeft />Markets</Link></Button><RequireApi>
-      {q.isLoading ? <TableSkeleton /> : q.error ? <ErrorState error={q.error} onRetry={() => q.refetch()} /> : !r ? <EmptyState title="Instrument not found" /> : (
-        <>
-          <PageHeader title={inst.symbol(r)} description={`${inst.name(r)} · ${inst.cls(r) || "—"} · ${inst.exchange(r)}`}
-            actions={tradable && (
-              <>
-                <OrderDialog instrumentId={id} symbol={inst.symbol(r)} price={inst.price(r)} defaultSide="BUY" trigger={<Button>Buy</Button>} />
-                <OrderDialog instrumentId={id} symbol={inst.symbol(r)} price={inst.price(r)} defaultSide="SELL" trigger={<Button variant="outline">Sell</Button>} />
-              </>
-            )} />
-          <div className="mb-6 grid gap-3 md:grid-cols-3">
-            <StatCard label="Latest price" value={fmtINR(inst.price(r))} hint={<>As of {fmtTime(inst.ts(r))} · <DemoBadge /></>} />
-          </div>
-          <div className="mb-6 rounded-lg border bg-card">
-            <dl className="grid divide-y sm:grid-cols-2 sm:divide-y-0">
-              {Object.entries(r).filter(([, v]) => v !== null && typeof v !== "object").map(([k, v]) => (
-                <div key={k} className="flex min-w-0 justify-between gap-4 border-b px-4 py-2 text-sm">
-                  <dt className="text-muted-foreground">{humanize(k)}</dt><dd className="num min-w-0 break-words text-right">{String(v)}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-          <NotConnected feature="Historical price chart" detail="No verified historical-prices endpoint. The chart will appear once one is exposed." />
-        </>
-      )}
-    </RequireApi></>
+    <>
+      <Button asChild variant="link" size="sm" className="mb-3 px-0">
+        <Link to="/markets">
+          <ArrowLeft />
+          Markets
+        </Link>
+      </Button>
+      <RequireApi>
+        {q.isLoading ? (
+          <TableSkeleton />
+        ) : q.error ? (
+          <ErrorState error={q.error} onRetry={() => q.refetch()} />
+        ) : !r ? (
+          <EmptyState title="Instrument not found" />
+        ) : (
+          <>
+            <PageHeader
+              title={inst.symbol(r)}
+              description={`${inst.name(r)} · ${inst.cls(r) || "—"} · ${inst.exchange(r)}`}
+              actions={
+                <>
+                  {session?.token && (
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label={watched ? "Remove from watchlist" : "Add to watchlist"}
+                      disabled={toggleWatchlist.isPending}
+                      onClick={() => toggleWatchlist.mutate()}
+                    >
+                      <Star className={watched ? "fill-current" : ""} />
+                    </Button>
+                  )}
+                  {tradable && (
+                    <>
+                      <OrderDialog
+                        instrumentId={id}
+                        symbol={inst.symbol(r)}
+                        price={inst.price(r)}
+                        lotSize={toNum(r["lot_size"])}
+                        tickSize={toNum(r["tick_size"])}
+                        currency={String(r["currency"] ?? "INR")}
+                        defaultSide="BUY"
+                        trigger={<Button>Buy</Button>}
+                      />
+                      <OrderDialog
+                        instrumentId={id}
+                        symbol={inst.symbol(r)}
+                        price={inst.price(r)}
+                        lotSize={toNum(r["lot_size"])}
+                        tickSize={toNum(r["tick_size"])}
+                        currency={String(r["currency"] ?? "INR")}
+                        defaultSide="SELL"
+                        trigger={<Button variant="outline">Sell</Button>}
+                      />
+                    </>
+                  )}
+                </>
+              }
+            />
+            <div className="mb-6 grid gap-3 md:grid-cols-3">
+              <StatCard
+                label="Latest price"
+                value={fmtINR(inst.price(r))}
+                hint={
+                  <>
+                    As of {fmtTime(inst.ts(r))} · <DemoBadge />
+                  </>
+                }
+              />
+            </div>
+            {q.priceError && (
+              <p role="alert" className="mb-4 text-sm text-loss">
+                Live price updates unavailable; showing the last received price.
+              </p>
+            )}
+            <div className="mb-6 rounded-lg border bg-card">
+              <dl className="grid divide-y sm:grid-cols-2 sm:divide-y-0">
+                {Object.entries(r)
+                  .filter(([, v]) => v !== null && typeof v !== "object")
+                  .map(([k, v]) => (
+                    <div
+                      key={k}
+                      className="flex min-w-0 justify-between gap-4 border-b px-4 py-2 text-sm"
+                    >
+                      <dt className="text-muted-foreground">{humanize(k)}</dt>
+                      <dd className="num min-w-0 break-words text-right">{String(v)}</dd>
+                    </div>
+                  ))}
+              </dl>
+            </div>
+            <PriceChart id={id} />
+          </>
+        )}
+      </RequireApi>
+    </>
   );
 }
