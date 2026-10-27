@@ -17,7 +17,7 @@ describe("order review", () => {
     render(<QueryClientProvider client={new QueryClient()}><OrderDialog instrumentId="5" symbol="TEST" price={100} trigger={<Button>Buy</Button>} /></QueryClientProvider>);
     fireEvent.click(screen.getByRole("button", { name: "Buy" }));
     await screen.findByRole("combobox", { name: "Portfolio" });
-    await screen.findByText("Main · INR");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Review order" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Review order" }));
     await screen.findByRole("button", { name: "Submit order" });
     expect(place).not.toHaveBeenCalled();
@@ -29,7 +29,7 @@ describe("order review", () => {
     const place = vi.spyOn(api, "placeOrder").mockResolvedValue({ order_id: 43, status: "NEW" });
     render(<QueryClientProvider client={new QueryClient()}><OrderDialog instrumentId="5" symbol="TEST" price={100} lotSize={25} tickSize={0.05} trigger={<Button>Buy</Button>} /></QueryClientProvider>);
     fireEvent.click(screen.getByRole("button", { name: "Buy" }));
-    await screen.findByText("Main · INR");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Review order" })).toBeEnabled());
     fireEvent.change(screen.getByLabelText("Quantity"), { target: { value: "100.5" } });
     fireEvent.click(screen.getByRole("button", { name: "Review order" }));
     await screen.findByText("Quantity must be a multiple of lot size 25");
@@ -59,7 +59,8 @@ describe("order review", () => {
     fireEvent.click(screen.getByRole("button", { name: "+ New portfolio" }));
     fireEvent.change(screen.getByLabelText("Portfolio name"), { target: { value: "Growth" } });
     fireEvent.click(screen.getByRole("button", { name: "Create portfolio" }));
-    await screen.findByText("Growth · INR");
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Portfolio" })).toHaveTextContent("Growth"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Review order" })).toBeEnabled());
     expect(create).toHaveBeenCalledWith({ name: "Growth", base_currency: "INR" });
     fireEvent.click(screen.getByRole("button", { name: "Review order" }));
     fireEvent.click(await screen.findByRole("button", { name: "Submit order" }));
@@ -71,7 +72,7 @@ describe("order review", () => {
     const invalidate = vi.spyOn(client, "invalidateQueries");
     render(<QueryClientProvider client={client}><OrderDialog instrumentId="5" symbol="TEST" price={100} currency="INR" trigger={<Button>Buy</Button>} /></QueryClientProvider>);
     fireEvent.click(screen.getByRole("button", { name: "Buy" }));
-    await screen.findByText("Main · INR");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add funds" })).toBeEnabled());
     for (let n = 1; n <= 2; n++) {
       fireEvent.click(screen.getByRole("button", { name: "Add funds" }));
       fireEvent.click(await screen.findByRole("button", { name: "Deposit funds" }));
