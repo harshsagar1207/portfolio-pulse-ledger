@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -7,11 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, isApiConfigured } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { Link } from "@tanstack/react-router";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { OrderPortfolioActions } from "./OrderPortfolioActions";
 import { fmtINR, pick } from "@/lib/format";
 import { createOrderSchema, orderPayload, type OrderInput } from "@/lib/order";
 import type { z } from "zod";
-import { usePortfolioIds } from "@/hooks/use-portfolio-data";
 import { StatusBadge } from "./states";
 import { cn } from "@/lib/utils";
 
@@ -23,25 +26,35 @@ export const loadSessionOrders = (): SubmittedOrder[] => {
 };
 const saveOrder = (o: SubmittedOrder) => { try { sessionStorage.setItem(SKEY, JSON.stringify([o, ...loadSessionOrders()].slice(0, 50))); } catch { /* Receipt remains visible even if browser storage is unavailable. */ } };
 
-export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, defaultSide = "BUY", trigger }: {
-  instrumentId: string; symbol: string; price: number | null; lotSize?: number | null; tickSize?: number | null; defaultSide?: "BUY" | "SELL"; trigger: React.ReactNode;
+export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, currency = "INR", defaultSide = "BUY", trigger }: {
+  instrumentId: string; symbol: string; price: number | null; lotSize?: number | null; tickSize?: number | null; currency?: string; defaultSide?: "BUY" | "SELL"; trigger: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState<OrderInput | null>(null);
   const [result, setResult] = useState<SubmittedOrder | null>(null);
   const idemKey = useRef<string>(crypto.randomUUID());
-  const { ids } = usePortfolioIds();
+  const { session, ready } = useAuth();
+  const portfolioQueryKey = ["portfolios", session?.token];
+  const portfolios = useQuery({ queryKey: portfolioQueryKey, queryFn: api.portfolios, enabled: open && ready && !!session && isApiConfigured(), retry: false });
+  const [action, setAction] = useState<"create" | "deposit" | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [selectedId, setSelectedId] = useState("");
   const qc = useQueryClient();
 
   const schema = createOrderSchema(lotSize, tickSize);
   const form = useForm<z.input<typeof schema>, unknown, OrderInput>({
     resolver: zodResolver(schema),
-    defaultValues: { portfolio_id: ids[0] ?? "", instrument_id: instrumentId, side: defaultSide, order_type: "MARKET", quantity: lotSize ?? 1 },
+    defaultValues: { portfolio_id: "", instrument_id: instrumentId, side: defaultSide, order_type: "MARKET", quantity: lotSize ?? 1 },
   });
   const v = form.watch();
   useEffect(() => {
-    if (open && !form.getValues("portfolio_id") && ids[0]) form.setValue("portfolio_id", ids[0]);
-  }, [open, ids, form]);
+    const list = portfolios.data;
+    if (open && list && !list.some((p) => String(p.portfolio_id) === selectedId)) {
+      setSelectedId(list[0] ? String(list[0].portfolio_id) : "");
+    }
+  }, [open, portfolios.data, selectedId]);
+  useEffect(() => { form.setValue("portfolio_id", selectedId); }, [selectedId, form]);
+  const selected = portfolios.data?.find((p) => String(p.portfolio_id) === selectedId);
   const values = confirm ?? v;
   const unit = values.order_type === "LIMIT" ? Number(values.limit_price) : price;
   const est = unit && Number(values.quantity) > 0 ? unit * Number(values.quantity) : null;
@@ -75,21 +88,29 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, de
   });
 
   const reset = (o: boolean) => {
+    if (!o && (m.isPending || actionBusy)) return;
     setOpen(o);
-    if (!o && m.isPending) return;
-    if (!o) { setResult(null); setConfirm(null); m.reset(); }
+    if (!o) { setResult(null); setConfirm(null); setAction(null); m.reset(); }
   };
 
   return (
     <Dialog open={open} onOpenChange={reset}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-        <DialogContent onInteractOutside={(e) => { if (m.isPending) e.preventDefault(); }} onEscapeKeyDown={(e) => { if (m.isPending) e.preventDefault(); }}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto" onInteractOutside={(e) => { if (m.isPending || actionBusy) e.preventDefault(); }} onEscapeKeyDown={(e) => { if (m.isPending || actionBusy) e.preventDefault(); }}>
         <DialogHeader>
           <DialogTitle>Order · {symbol}</DialogTitle>
           <DialogDescription>Demo portfolio system — orders are not routed to NSE or BSE.</DialogDescription>
         </DialogHeader>
 
-        {result ? (
+        {!ready ? <p className="text-sm text-muted-foreground">Loading…</p> : !session ? (
+          <Button asChild><Link to="/login">Sign in to place orders</Link></Button>
+        ) : !isApiConfigured() ? <p role="alert" className="text-sm text-loss">Portfolio service is not connected.</p>
+        : portfolios.isPending ? <p className="text-sm text-muted-foreground">Loading portfolios…</p>
+        : portfolios.error ? <div className="space-y-3"><p role="alert" className="text-sm text-loss">{portfolios.error.message}</p><Button variant="outline" onClick={() => portfolios.refetch()}>Retry</Button></div>
+        : action ? <OrderPortfolioActions mode={action} portfolioId={selectedId} currency={currency} portfolioQueryKey={portfolioQueryKey} onBusy={setActionBusy}
+          onBack={() => setAction(null)} onCreated={(p) => { setSelectedId(String(p.portfolio_id)); setAction(null); }} />
+        : !portfolios.data?.length ? <div className="space-y-4"><h3 className="font-semibold">Create your first portfolio</h3><Button className="w-full" onClick={() => setAction("create")}>+ New portfolio</Button></div>
+        : result ? (
           <div className="space-y-3">
             <div className="rounded-md border p-4 text-sm">
               <p>Order ID <span className="num font-semibold">{result.order_id}</span></p>
@@ -101,7 +122,7 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, de
           </div>
         ) : confirm ? (
           <div className="space-y-4 text-sm">
-            <p>Confirm <b>{confirm.side}</b> {confirm.quantity} × {symbol} ({confirm.order_type}{confirm.order_type === "LIMIT" ? ` @ ${fmtINR(confirm.limit_price)}` : ""}) in portfolio <span className="num">{confirm.portfolio_id}</span>?</p>
+            <p>Confirm <b>{confirm.side}</b> {confirm.quantity} × {symbol} ({confirm.order_type}{confirm.order_type === "LIMIT" ? ` @ ${fmtINR(confirm.limit_price)}` : ""}) in portfolio <span className="font-semibold break-words">{selected?.name}</span>?</p>
             <p className="text-muted-foreground">Estimated value: <span className="num">{fmtINR(est)}</span> (excludes charges)</p>
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" disabled={m.isPending} onClick={() => setConfirm(null)}>Back</Button>
@@ -111,6 +132,7 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, de
         ) : (
           <form className="space-y-4" onSubmit={form.handleSubmit((o) => setConfirm(o))}>
             <input type="hidden" {...form.register("instrument_id")} />
+            <input type="hidden" {...form.register("portfolio_id")} />
             {m.error && <p role="alert" className="text-sm text-loss">{m.error.message}</p>}
             <div className="grid grid-cols-2 gap-2">
               {(["BUY", "SELL"] as const).map((s) => (
@@ -126,7 +148,18 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, de
                   className={cn("rounded-md border py-1.5 text-xs font-medium", v.order_type === t && "border-primary bg-accent")}>{t}</Button>
               ))}
             </div>
-            <Field label="Portfolio ID" error={form.formState.errors.portfolio_id?.message}><Input {...form.register("portfolio_id")} /></Field>
+            <div className="space-y-1.5">
+              <Label htmlFor="order-portfolio">Portfolio</Label>
+              <Select value={selectedId} onValueChange={(value) => { if (value === "new") setAction("create"); else setSelectedId(value); }}>
+                <SelectTrigger id="order-portfolio"><SelectValue placeholder="Select portfolio" /></SelectTrigger>
+                <SelectContent>
+                  {portfolios.data.map((p) => <SelectItem key={p.portfolio_id} value={String(p.portfolio_id)}>{p.name} · {p.base_currency}</SelectItem>)}
+                  <SelectItem value="new">+ New portfolio</SelectItem>
+                </SelectContent>
+              </Select>
+              {form.formState.errors.portfolio_id && <p className="text-xs text-loss">{form.formState.errors.portfolio_id.message}</p>}
+              <Button type="button" variant="link" size="sm" className="px-0" disabled={!selected} onClick={() => setAction("deposit")}>Add funds</Button>
+            </div>
             <Field label="Quantity" error={form.formState.errors.quantity?.message}><Input inputMode="decimal" {...form.register("quantity")} /></Field>
             {lotSize && <p className="text-xs text-muted-foreground">Lot size: {lotSize}</p>}
             {v.order_type === "LIMIT" && (
@@ -135,7 +168,7 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, de
             <div className="flex justify-between rounded-md bg-muted px-3 py-2 text-sm">
               <span className="text-muted-foreground">Estimated value</span><span className="num font-medium">{fmtINR(est)}</span>
             </div>
-            <Button type="submit" className="w-full">Review order</Button>
+            <Button type="submit" className="w-full" disabled={!selected}>Review order</Button>
           </form>
         )}
       </DialogContent>
