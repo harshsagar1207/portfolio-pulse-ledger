@@ -10,3 +10,9 @@
 - [ ] Run rule tests and verify available browser flows.
 
 Live account verification requires the Portfolio API connection; no financial data or successful API responses are simulated in the app.
+
+## Order portfolio selection
+- [ ] Replace typed IDs with authenticated portfolio selection and first-result default.
+- [ ] Create and select portfolios, including empty-list and backend error states.
+- [ ] Add funds with explicit instrument currency and fresh idempotency keys; refresh portfolio data.
+- [ ] Run focused tests and verify available order-window flows.
