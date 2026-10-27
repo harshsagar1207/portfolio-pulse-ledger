@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api, type Portfolio } from "@/lib/api";
 
-export function OrderPortfolioActions({ mode, portfolioId, currency, onCreated, onBack, onBusy }: {
+export function OrderPortfolioActions({ mode, portfolioId, currency, portfolioQueryKey, onCreated, onBack, onBusy }: {
   mode: "create" | "deposit"; portfolioId: string; currency: string;
+  portfolioQueryKey: readonly (string | undefined)[];
   onCreated: (portfolio: Portfolio) => void; onBack: () => void; onBusy: (busy: boolean) => void;
 }) {
   const [name, setName] = useState("");
@@ -21,7 +22,7 @@ export function OrderPortfolioActions({ mode, portfolioId, currency, onCreated, 
     },
     onSuccess: async (portfolio) => {
       if (portfolio) {
-        qc.setQueryData<Portfolio[]>(["portfolios"], (old) => [...(old ?? []).filter((p) => p.portfolio_id !== portfolio.portfolio_id), portfolio]);
+        qc.setQueryData<Portfolio[]>(portfolioQueryKey, (old) => [...(old ?? []).filter((p) => p.portfolio_id !== portfolio.portfolio_id), portfolio]);
         onCreated(portfolio);
         await qc.invalidateQueries({ queryKey: ["portfolios"] });
       } else {

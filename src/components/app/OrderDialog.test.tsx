@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { OrderDialog } from "./OrderDialog";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 
 vi.mock("@/lib/auth", () => ({ useAuth: () => ({ session: { token: "test-token" }, ready: true }) }));
 vi.mock("@/lib/api", async (original) => ({ ...await original<typeof import("@/lib/api")>(), isApiConfigured: () => true }));
@@ -12,6 +12,17 @@ beforeEach(() => { vi.spyOn(api, "portfolios").mockResolvedValue([{ portfolio_id
 afterEach(() => { cleanup(); localStorage.clear(); sessionStorage.clear(); vi.restoreAllMocks(); });
 
 describe("order review", () => {
+  it.each([409, 422])("shows the backend creation error for %s without returning to orders", async (status) => {
+    vi.mocked(api.portfolios).mockResolvedValue([]);
+    vi.spyOn(api, "createPortfolio").mockRejectedValue(new ApiError("validation", "Growth is not a valid available name", status));
+    render(<QueryClientProvider client={new QueryClient()}><OrderDialog instrumentId="5" symbol="TEST" price={100} trigger={<Button>Buy</Button>} /></QueryClientProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Buy" }));
+    fireEvent.click(await screen.findByRole("button", { name: "+ New portfolio" }));
+    fireEvent.change(screen.getByLabelText("Portfolio name"), { target: { value: "Growth" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create portfolio" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Growth is not a valid available name");
+    expect(screen.queryByRole("button", { name: "Review order" })).not.toBeInTheDocument();
+  });
   it("defaults to the first authenticated portfolio and sends only a confirmed order", async () => {
     const place = vi.spyOn(api, "placeOrder").mockResolvedValue({ order_id: 42, status: "ACCEPTED" });
     render(<QueryClientProvider client={new QueryClient()}><OrderDialog instrumentId="5" symbol="TEST" price={100} trigger={<Button>Buy</Button>} /></QueryClientProvider>);

@@ -4,15 +4,16 @@
 - [x] Complete page metadata and check tests and browser flows.
 
 ## API frontend update
-- [ ] Connect live prices and instrument chart.
-- [ ] Connect order history and cancellation; correct order payload and increment validation.
-- [ ] Connect trades, cash ledger and realized P&L with portfolio selection.
-- [ ] Run rule tests and verify available browser flows.
+- [x] Connect live prices and instrument chart.
+- [x] Connect order history and cancellation; correct order payload and increment validation.
+- [x] Connect trades, cash ledger and realized P&L with portfolio selection.
+- [x] Run rule tests and verify available browser flows.
 
 Live account verification requires the Portfolio API connection; no financial data or successful API responses are simulated in the app.
 
 ## Order portfolio selection
-- [ ] Replace typed IDs with authenticated portfolio selection and first-result default.
-- [ ] Create and select portfolios, including empty-list and backend error states.
-- [ ] Add funds with explicit instrument currency and fresh idempotency keys; refresh portfolio data.
-- [ ] Run focused tests and verify available order-window flows.
+- [x] Replace typed IDs with authenticated portfolio selection and first-result default.
+- [x] Create and select portfolios, including empty-list and backend error states.
+- [x] Add funds with explicit instrument currency and fresh idempotency keys; refresh portfolio data.
+- [x] Run focused tests and check live connection availability.
+- [ ] Verify creation, deposit, and order submission against a live account (blocked: Portfolio API is not configured in the preview).

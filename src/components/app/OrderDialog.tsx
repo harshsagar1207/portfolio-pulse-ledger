@@ -34,7 +34,8 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, cu
   const [result, setResult] = useState<SubmittedOrder | null>(null);
   const idemKey = useRef<string>(crypto.randomUUID());
   const { session, ready } = useAuth();
-  const portfolios = useQuery({ queryKey: ["portfolios"], queryFn: api.portfolios, enabled: open && ready && !!session && isApiConfigured(), retry: false });
+  const portfolioQueryKey = ["portfolios", session?.token];
+  const portfolios = useQuery({ queryKey: portfolioQueryKey, queryFn: api.portfolios, enabled: open && ready && !!session && isApiConfigured(), retry: false });
   const [action, setAction] = useState<"create" | "deposit" | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [selectedId, setSelectedId] = useState("");
@@ -106,7 +107,7 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, cu
         ) : !isApiConfigured() ? <p role="alert" className="text-sm text-loss">Portfolio service is not connected.</p>
         : portfolios.isPending ? <p className="text-sm text-muted-foreground">Loading portfolios…</p>
         : portfolios.error ? <div className="space-y-3"><p role="alert" className="text-sm text-loss">{portfolios.error.message}</p><Button variant="outline" onClick={() => portfolios.refetch()}>Retry</Button></div>
-        : action ? <OrderPortfolioActions mode={action} portfolioId={selectedId} currency={currency} onBusy={setActionBusy}
+        : action ? <OrderPortfolioActions mode={action} portfolioId={selectedId} currency={currency} portfolioQueryKey={portfolioQueryKey} onBusy={setActionBusy}
           onBack={() => setAction(null)} onCreated={(p) => { setSelectedId(String(p.portfolio_id)); setAction(null); }} />
         : !portfolios.data?.length ? <div className="space-y-4"><h3 className="font-semibold">Create your first portfolio</h3><Button className="w-full" onClick={() => setAction("create")}>+ New portfolio</Button></div>
         : result ? (
