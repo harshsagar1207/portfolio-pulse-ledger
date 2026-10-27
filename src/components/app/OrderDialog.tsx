@@ -37,6 +37,7 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, cu
   const portfolios = useQuery({ queryKey: ["portfolios"], queryFn: api.portfolios, enabled: open && ready && !!session && isApiConfigured(), retry: false });
   const [action, setAction] = useState<"create" | "deposit" | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  const [selectedId, setSelectedId] = useState("");
   const qc = useQueryClient();
 
   const schema = createOrderSchema(lotSize, tickSize);
@@ -47,11 +48,12 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, cu
   const v = form.watch();
   useEffect(() => {
     const list = portfolios.data;
-    if (open && list && !list.some((p) => String(p.portfolio_id) === String(form.getValues("portfolio_id")))) {
-      form.setValue("portfolio_id", list[0] ? String(list[0].portfolio_id) : "");
+    if (open && list && !list.some((p) => String(p.portfolio_id) === selectedId)) {
+      setSelectedId(list[0] ? String(list[0].portfolio_id) : "");
     }
-  }, [open, portfolios.data, form]);
-  const selected = portfolios.data?.find((p) => String(p.portfolio_id) === String(v.portfolio_id));
+  }, [open, portfolios.data, selectedId]);
+  useEffect(() => { form.setValue("portfolio_id", selectedId); }, [selectedId, form]);
+  const selected = portfolios.data?.find((p) => String(p.portfolio_id) === selectedId);
   const values = confirm ?? v;
   const unit = values.order_type === "LIMIT" ? Number(values.limit_price) : price;
   const est = unit && Number(values.quantity) > 0 ? unit * Number(values.quantity) : null;
@@ -104,8 +106,8 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, cu
         ) : !isApiConfigured() ? <p role="alert" className="text-sm text-loss">Portfolio service is not connected.</p>
         : portfolios.isPending ? <p className="text-sm text-muted-foreground">Loading portfolios…</p>
         : portfolios.error ? <div className="space-y-3"><p role="alert" className="text-sm text-loss">{portfolios.error.message}</p><Button variant="outline" onClick={() => portfolios.refetch()}>Retry</Button></div>
-        : action ? <OrderPortfolioActions mode={action} portfolioId={String(v.portfolio_id)} currency={currency} onBusy={setActionBusy}
-          onBack={() => setAction(null)} onCreated={(p) => { form.setValue("portfolio_id", String(p.portfolio_id)); setAction(null); }} />
+        : action ? <OrderPortfolioActions mode={action} portfolioId={selectedId} currency={currency} onBusy={setActionBusy}
+          onBack={() => setAction(null)} onCreated={(p) => { setSelectedId(String(p.portfolio_id)); setAction(null); }} />
         : !portfolios.data?.length ? <div className="space-y-4"><h3 className="font-semibold">Create your first portfolio</h3><Button className="w-full" onClick={() => setAction("create")}>+ New portfolio</Button></div>
         : result ? (
           <div className="space-y-3">
@@ -147,7 +149,7 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, cu
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="order-portfolio">Portfolio</Label>
-              <Select value={String(v.portfolio_id)} onValueChange={(value) => { if (value === "new") setAction("create"); else form.setValue("portfolio_id", value, { shouldValidate: true }); }}>
+              <Select value={selectedId} onValueChange={(value) => { if (value === "new") setAction("create"); else setSelectedId(value); }}>
                 <SelectTrigger id="order-portfolio"><SelectValue placeholder="Select portfolio" /></SelectTrigger>
                 <SelectContent>
                   {portfolios.data.map((p) => <SelectItem key={p.portfolio_id} value={String(p.portfolio_id)}>{p.name} · {p.base_currency}</SelectItem>)}
