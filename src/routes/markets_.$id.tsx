@@ -33,8 +33,8 @@ function InstrumentDetail() {
           <PageHeader title={inst.symbol(r)} description={`${inst.name(r)} · ${inst.cls(r) || "—"} · ${inst.exchange(r)}`}
             actions={tradable && (
               <>
-                <OrderDialog instrumentId={id} symbol={inst.symbol(r)} price={inst.price(r)} lotSize={toNum(r["lot_size"])} tickSize={toNum(r["tick_size"])} defaultSide="BUY" trigger={<Button>Buy</Button>} />
-                <OrderDialog instrumentId={id} symbol={inst.symbol(r)} price={inst.price(r)} lotSize={toNum(r["lot_size"])} tickSize={toNum(r["tick_size"])} defaultSide="SELL" trigger={<Button variant="outline">Sell</Button>} />
+                <OrderDialog instrumentId={id} symbol={inst.symbol(r)} price={inst.price(r)} lotSize={toNum(r["lot_size"])} tickSize={toNum(r["tick_size"])} currency={String(r["currency"] ?? "INR")} defaultSide="BUY" trigger={<Button>Buy</Button>} />
+                <OrderDialog instrumentId={id} symbol={inst.symbol(r)} price={inst.price(r)} lotSize={toNum(r["lot_size"])} tickSize={toNum(r["tick_size"])} currency={String(r["currency"] ?? "INR")} defaultSide="SELL" trigger={<Button variant="outline">Sell</Button>} />
               </>
             )} />
           <div className="mb-6 grid gap-3 md:grid-cols-3">

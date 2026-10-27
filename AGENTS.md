@@ -18,3 +18,4 @@
 - Share the price query across instrument tables and detail views, and poll portfolio snapshots separately so valuation stays backend-owned.
 - Reuse portfolio selection and authenticated history views for trades, ledger, and realized P&L to keep session-aware fetching consistent.
 - Validate instrument increments in the order schema and serialize the backend order contract in one payload function to prevent form/API field drift.
+- Order-window portfolio selection uses the authenticated portfolios query, not browser-saved IDs; separate creation and deposit forms avoid nested submissions and invalidate shared portfolio queries after changes.

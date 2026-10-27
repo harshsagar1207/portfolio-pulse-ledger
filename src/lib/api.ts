@@ -116,6 +116,11 @@ export function asList<T = Record<string, unknown>>(body: unknown): T[] {
 }
 
 export const api = {
+  portfolios: () => apiRequest<Portfolio[]>("/portfolios"),
+  createPortfolio: (body: { name: string; base_currency?: string }) =>
+    apiRequest<Portfolio>("/portfolios", { method: "POST", body }),
+  deposit: (id: string, body: { amount: number; currency: string }, idempotencyKey: string) =>
+    apiRequest<unknown>(`/portfolios/${encodeURIComponent(id)}/deposit`, { method: "POST", body, idempotencyKey }),
   health: () => apiRequest<unknown>("/health", { auth: false }),
   login: (body: { username?: string; email?: string; password: string }) =>
     apiRequest<Record<string, unknown>>("/auth/login", { method: "POST", body, auth: false }),
@@ -141,3 +146,5 @@ export const api = {
   reconcile: () => apiRequest<unknown>("/admin/reconcile"),
   audit: () => apiRequest<unknown>("/audit").then((b) => asList(b)),
 };
+
+export interface Portfolio { portfolio_id: number; name: string; base_currency: string }
