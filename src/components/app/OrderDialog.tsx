@@ -129,6 +129,7 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, cu
         ) : (
           <form className="space-y-4" onSubmit={form.handleSubmit((o) => setConfirm(o))}>
             <input type="hidden" {...form.register("instrument_id")} />
+            <input type="hidden" {...form.register("portfolio_id")} />
             {m.error && <p role="alert" className="text-sm text-loss">{m.error.message}</p>}
             <div className="grid grid-cols-2 gap-2">
               {(["BUY", "SELL"] as const).map((s) => (
@@ -164,7 +165,7 @@ export function OrderDialog({ instrumentId, symbol, price, lotSize, tickSize, cu
             <div className="flex justify-between rounded-md bg-muted px-3 py-2 text-sm">
               <span className="text-muted-foreground">Estimated value</span><span className="num font-medium">{fmtINR(est)}</span>
             </div>
-            <Button type="submit" className="w-full">Review order</Button>
+            <Button type="submit" className="w-full" disabled={!selected}>Review order</Button>
           </form>
         )}
       </DialogContent>

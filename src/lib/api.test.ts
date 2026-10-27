@@ -6,7 +6,7 @@ async function setup() {
   vi.stubEnv("VITE_API_BASE_URL", "https://portfolio-api.test");
   vi.resetModules();
   const client = await import("./api");
-  const fetcher = vi.fn().mockResolvedValue(new Response("[]", { status: 200 }));
+  const fetcher = vi.fn().mockImplementation(async () => new Response("[]", { status: 200 }));
   vi.stubGlobal("fetch", fetcher);
   return { ...client, fetcher };
 }

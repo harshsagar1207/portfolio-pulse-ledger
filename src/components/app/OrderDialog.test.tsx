@@ -35,7 +35,7 @@ describe("order review", () => {
     await screen.findByText("Quantity must be a multiple of lot size 25");
     expect(place).not.toHaveBeenCalled();
     fireEvent.change(screen.getByLabelText("Quantity"), { target: { value: "100" } });
-    fireEvent.click(screen.getByRole("button", { name: "LIMIT", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: /^LIMIT$/ }));
     fireEvent.change(screen.getByLabelText(/Limit price/), { target: { value: "100.11" } });
     fireEvent.click(screen.getByRole("button", { name: "Review order" }));
     await screen.findByText("Limit price must be a multiple of tick size 0.05");
@@ -74,7 +74,7 @@ describe("order review", () => {
     await screen.findByText("Main · INR");
     for (let n = 1; n <= 2; n++) {
       fireEvent.click(screen.getByRole("button", { name: "Add funds" }));
-      fireEvent.click(screen.getByRole("button", { name: "Deposit funds" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Deposit funds" }));
       await screen.findByRole("button", { name: "Review order" });
       expect(deposit).toHaveBeenCalledTimes(n);
     }
