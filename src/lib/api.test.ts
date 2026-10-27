@@ -12,6 +12,29 @@ async function setup() {
 }
 
 describe("Portfolio API endpoint contract", () => {
+  it("lists portfolios with auth and creates a named INR portfolio", async () => {
+    const { api, setSession, fetcher } = await setup();
+    setSession({ token: "test-only-token" });
+    await api.portfolios(); await api.createPortfolio({ name: "Growth", base_currency: "INR" });
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://portfolio-api.test/portfolios");
+    expect(fetcher.mock.calls[0]?.[1].headers.Authorization).toBe("Bearer test-only-token");
+    expect(fetcher.mock.calls[1]?.[1].method).toBe("POST");
+    expect(JSON.parse(fetcher.mock.calls[1]?.[1].body)).toEqual({ name: "Growth", base_currency: "INR" });
+  });
+  it.each([409, 422])("preserves portfolio creation error text for %s", async (status) => {
+    const { api, fetcher } = await setup();
+    fetcher.mockResolvedValue(new Response(JSON.stringify({ detail: "Portfolio name is already used or invalid" }), { status }));
+    await expect(api.createPortfolio({ name: "Growth" })).rejects.toMatchObject({ status, message: "Portfolio name is already used or invalid" });
+  });
+  it("deposits the explicit instrument currency and UUID header", async () => {
+    const { api, fetcher } = await setup();
+    const key = "5f6f91e8-4c0d-4b4e-8f13-73db7f3a702b";
+    await api.deposit("17", { amount: 100000, currency: "INR" }, key);
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://portfolio-api.test/portfolios/17/deposit");
+    expect(fetcher.mock.calls[0]?.[1].method).toBe("POST");
+    expect(fetcher.mock.calls[0]?.[1].headers["Idempotency-Key"]).toBe(key);
+    expect(JSON.parse(fetcher.mock.calls[0]?.[1].body)).toEqual({ amount: 100000, currency: "INR" });
+  });
   it("requests public prices and one-minute history without a bearer token", async () => {
     const { api, setSession, fetcher } = await setup();
     setSession({ token: "test-only-token" });
